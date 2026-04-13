@@ -24,7 +24,7 @@ export default function ChatList() {
       {/* 🔥 새 채팅 버튼 */}
       <button
         onClick={createChat}
-        className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 transition text-white py-2 rounded-lg mb-4"
+        className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-600 transition text-white py-2 pr-2 rounded-lg mb-4"
       >
         <FiPlus /> 새 채팅
       </button>
