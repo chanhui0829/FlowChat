@@ -1,12 +1,14 @@
 {
   "compilerOptions": {
     "outDir": "dist",
-    "module": "commonjs",
-    "target": "es2019",
-    "moduleResolution": "node",
+    "module": "Node16",
+    "target": "ES2022",
+    "moduleResolution": "Node16",
     "esModuleInterop": true,
     "strict": true,
-    "rootDir": "./"
+    "rootDir": "./",
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["index.ts"]
 }
