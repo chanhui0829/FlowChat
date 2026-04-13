@@ -42,7 +42,7 @@ ${item.description.replace(/<[^>]+>/g, '')}
 🔗 ${item.link}
 `
           )
-          .join('\n'),
+          .join('\n\n'),
       };
     } catch (err: any) {
       console.error('❌ 네이버 API 에러:', err.response?.data || err.message);

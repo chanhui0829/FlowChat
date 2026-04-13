@@ -1,8 +1,10 @@
 import { useChatStore } from '../store/chat.store';
-import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useState, useEffect, useRef } from 'react';
+
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 import type { Components } from 'react-markdown';
 
@@ -71,7 +73,9 @@ export default function ChatWindow({ typing, loading }: ChatWindowProps) {
             </button>
 
             <div className="prose prose-sm max-w-none">
-              <ReactMarkdown components={markdownComponents}>{msg.content}</ReactMarkdown>
+              <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]}>
+                {msg.content}
+              </ReactMarkdown>
             </div>
           </div>
 
