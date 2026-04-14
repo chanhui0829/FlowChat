@@ -7,9 +7,28 @@ export default function ChatList() {
 
   const [search, setSearch] = useState('');
 
+  // 🔥 모달 상태
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+
   const filteredChats = chats.filter((chat) =>
     chat.title.toLowerCase().includes(search.toLowerCase())
   );
+
+  /**
+   * 🔥 삭제 실행
+   */
+  const handleDeleteConfirm = () => {
+    if (!deleteTargetId) return;
+    deleteChat(deleteTargetId);
+    setDeleteTargetId(null);
+  };
+
+  /**
+   * 🔥 모달 닫기
+   */
+  const handleCloseModal = () => {
+    setDeleteTargetId(null);
+  };
 
   return (
     <div className="w-64 bg-white border-r p-4 flex flex-col">
@@ -29,7 +48,7 @@ export default function ChatList() {
         <FiPlus /> 새 채팅
       </button>
 
-      {/* 섹션 텍스트 추가 */}
+      {/* 섹션 텍스트 */}
       <div className="text-xs text-left text-gray-400 mb-2 px-1">최근</div>
 
       {/* 채팅 리스트 */}
@@ -43,7 +62,6 @@ export default function ChatList() {
                 : 'border-transparent hover:bg-gray-50'
             }`}
           >
-            {/* 좌측 정렬 + 강조 */}
             <div
               onClick={() => setCurrentChat(chat.id)}
               className="flex-1 truncate text-left font-medium"
@@ -51,14 +69,41 @@ export default function ChatList() {
               {chat.title}
             </div>
 
+            {/* 🔥 삭제 버튼 → 모달 열기 */}
             <FiX
               size={14}
               className="cursor-pointer text-gray-400 hover:text-gray-600"
-              onClick={() => deleteChat(chat.id)}
+              onClick={() => setDeleteTargetId(chat.id)}
             />
           </div>
         ))}
       </div>
+
+      {/* 🔥 커스텀 모달 */}
+      {deleteTargetId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-lg w-80 p-5">
+            <div className="text-lg font-semibold mb-2">채팅 삭제</div>
+            <div className="text-sm text-gray-600 mb-4">정말 이 채팅을 삭제하시겠습니까?</div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handleCloseModal}
+                className="px-3 py-1.5 text-sm rounded-md border hover:bg-gray-100"
+              >
+                취소
+              </button>
+
+              <button
+                onClick={handleDeleteConfirm}
+                className="px-3 py-1.5 text-sm rounded-md bg-red-500 text-white hover:bg-red-600"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
