@@ -189,8 +189,9 @@ AI 응답을 "구조화된 콘텐츠"로 제공하는 UX 중심 시스템 구현
 
 ---
 ## 👨‍💻 개발자
-
+```
 **Name**: 윤찬희
 **GitHub**: https://github.com/chanhui0829
-**Email**: cskgml762@naver.com  
+**Email**: cskgml762@naver.com
+```
 
