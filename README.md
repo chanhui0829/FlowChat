@@ -121,4 +121,4 @@ NAVER_CLIENT_SECRET=your_secret
 
 ## 🧑‍💻 Author
 
-* MCP Chat Project
+* 윤찬희
