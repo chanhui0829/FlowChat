@@ -87,7 +87,7 @@ export default function ChatWindow({ typing, loading, onQuickSend }: ChatWindowP
   };
 
   return (
-    <div className="flex-1 min-h-0 px-6 md:px-12 py-6 overflow-y-auto bg-gray-50">
+    <div className="flex-1 min-h-0 px-4 md:px-8 py-6 overflow-y-auto bg-gray-50">
       {!currentChat?.messages.length && !typing && !loading && (
         <div className="h-full flex items-center justify-center">
           <div className="flex flex-col items-center">
@@ -119,7 +119,7 @@ export default function ChatWindow({ typing, loading, onQuickSend }: ChatWindowP
         >
           {/* USER */}
           {msg.role === 'user' ? (
-            <div className="relative group w-fit max-w-[80%] px-4 py-2 rounded-2xl bg-gray-200 text-gray-800 shadow-md flex items-center leading-6">
+            <div className="relative group w-fit max-w-[80%] px-4 py-2 rounded-2xl bg-gray-200 text-gray-800 shadow-md flex items-center leading-6 mb-6">
               <div className="whitespace-pre-wrap break-words leading-7 text-sm ">
                 <ReactMarkdown components={markdownComponents}>{msg.content}</ReactMarkdown>
               </div>
