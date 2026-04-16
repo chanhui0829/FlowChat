@@ -44,15 +44,27 @@ function ChatPage() {
   }, [id, chats]);
 
   const formatResponse = (res: MCPResponse): string => {
-    if (typeof res === 'string') return res;
+    if (typeof res === 'string') {
+      try {
+        const parsed = JSON.parse(res);
+
+        if (parsed.result) return parsed.result;
+        if (parsed.translated) return parsed.translated;
+        if (parsed.summary) return parsed.summary;
+
+        return res;
+      } catch {
+        return res;
+      }
+    }
 
     if ('result' in res && typeof res.result === 'string') {
       return res.result;
     }
 
-    if ('translated' in res && res.translated) return `🌐 ${res.translated}`;
-    if ('summary' in res && res.summary) return `📝 ${res.summary}`;
-    if ('todo' in res && res.todo) return `✅ ${res.todo}`;
+    if ('translated' in res && res.translated) return res.translated as string;
+    if ('summary' in res && res.summary) return res.summary as string;
+    if ('todo' in res && res.todo) return res.todo as string;
 
     if ('temperature' in res && res.temperature)
       return `🌤️ ${res.city} 날씨: ${res.temperature}, ${res.condition}`;
@@ -64,18 +76,15 @@ function ChatPage() {
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
-
     if (!currentChatId) createChat();
-
     const userInput = input;
-    setInput('');
 
+    setInput('');
     addMessage({
       role: 'user',
       content: userInput,
       time: new Date().toISOString(),
     });
-
     setLoading(true);
 
     try {
@@ -85,7 +94,6 @@ function ChatPage() {
         fullText += chunk;
         setTyping(fullText);
       });
-
       const formatted = formatResponse(fullText);
 
       addMessage({
@@ -93,7 +101,6 @@ function ChatPage() {
         content: formatted,
         time: '',
       });
-
       setTyping('');
     } catch {
       addMessage({

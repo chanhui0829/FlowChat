@@ -11,7 +11,7 @@ type ChatWindowProps = {
 };
 
 /**
- * 🔥 Markdown 설정 (가독성 개선)
+ * 🔥 Markdown 설정
  */
 const markdownComponents: Components = {
   p({ children }) {
@@ -55,12 +55,22 @@ const markdownComponents: Components = {
           📋 복사
         </button>
 
-        <pre className="bg-gray-100 text-gray-800 p-4 rounded-xl overflow-x-auto text-sm leading-6 border">
+        <pre className="bg-gray-100 text-gray-800 p-4 rounded-xl overflow-x-auto text-sm leading-6 border max-w-full">
           {children}
         </pre>
       </div>
     );
   },
+};
+
+const formatTime = (time: string) => {
+  if (!time) return '';
+
+  const date = new Date(time);
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 export default function ChatWindow({ typing, loading, onQuickSend }: ChatWindowProps) {
@@ -71,9 +81,6 @@ export default function ChatWindow({ typing, loading, onQuickSend }: ChatWindowP
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  /**
-   * 🔥 자동 스크롤
-   */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({
       behavior: typing ? 'auto' : 'smooth',
@@ -119,21 +126,23 @@ export default function ChatWindow({ typing, loading, onQuickSend }: ChatWindowP
         >
           {/* USER */}
           {msg.role === 'user' ? (
-            <div className="relative group w-fit max-w-[80%] px-4 py-2 rounded-2xl bg-gray-200 text-gray-800 shadow-md flex items-center leading-6 mb-6">
-              <div className="whitespace-pre-wrap break-words leading-7 text-sm ">
-                <ReactMarkdown components={markdownComponents}>{msg.content}</ReactMarkdown>
+            <div className="flex flex-col items-end mb-4 max-w-[80%]">
+              <div className="bg-gray-200 text-gray-800 px-4 py-2 rounded-2xl shadow-md break-words">
+                <div className="whitespace-pre-wrap text-sm">
+                  <ReactMarkdown components={markdownComponents}>{msg.content}</ReactMarkdown>
+                </div>
               </div>
+
+              <div className="text-[11px] text-gray-500 mt-1 pr-2">{formatTime(msg.time)}</div>
             </div>
           ) : (
             /* AI */
-            <div className="flex gap-3 w-full max-w-[85%]">
-              {/* 프로필 */}
+            <div className="flex gap-3 mb-6">
               <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full bg-gradient-to-br from-gray-300 to-gray-400 text-sm shadow">
                 🤖
               </div>
 
-              {/* 메시지 카드 */}
-              <div className="relative group px-5 py-4 rounded-2xl bg-white border border-gray-200 shadow-md hover:shadow-lg transition">
+              <div className="w-full max-w-[70%] relative group px-5 py-4 rounded-2xl bg-white border border-gray-200 shadow-md hover:shadow-lg transition">
                 <button
                   onClick={() => copyToClipboard(msg.content, i)}
                   className="absolute top-2 right-3 text-xs opacity-40 hover:opacity-100 transition"
@@ -143,7 +152,7 @@ export default function ChatWindow({ typing, loading, onQuickSend }: ChatWindowP
 
                 <div className="text-xs text-gray-400 mb-2">AI 답변</div>
 
-                <div className="whitespace-pre-wrap break-words leading-7 text-sm text-gray-800  mb-6">
+                <div className="whitespace-pre-wrap break-words leading-7 text-sm text-gray-800">
                   <ReactMarkdown components={markdownComponents}>{msg.content}</ReactMarkdown>
                 </div>
               </div>
@@ -152,7 +161,6 @@ export default function ChatWindow({ typing, loading, onQuickSend }: ChatWindowP
         </div>
       ))}
 
-      {/* 로딩 */}
       {loading && !typing && (
         <div className="flex items-start gap-3">
           <div className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-300">
@@ -167,14 +175,13 @@ export default function ChatWindow({ typing, loading, onQuickSend }: ChatWindowP
         </div>
       )}
 
-      {/* 타이핑 */}
       {typing && (
-        <div className="flex gap-3 w-full max-w-[85%]">
+        <div className="flex gap-3 mb-6">
           <div className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-300">
             🤖
           </div>
 
-          <div className="px-5 py-4 rounded-2xl bg-white border border-gray-200 shadow-md">
+          <div className="w-full max-w-[70%] px-5 py-4 rounded-2xl bg-white border border-gray-200 shadow-md">
             <div className="text-xs text-gray-400 mb-2">AI 답변</div>
 
             <div className="whitespace-pre-wrap break-words leading-7 text-sm text-gray-800">

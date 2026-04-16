@@ -102,11 +102,17 @@ app.post('/mcp', async (req, res) => {
     });
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    if (res.flushHeaders) res.flushHeaders();
 
     for await (const chunk of stream) {
       const content = chunk.choices[0]?.delta?.content || '';
 
-      res.write(content.replace(/\n/g, '\n')); // 🔥 유지
+      if (content) {
+        res.write(content);
+      }
     }
 
     res.end();
