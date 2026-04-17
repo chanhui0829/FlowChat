@@ -27,14 +27,21 @@ export const sendMessageStream = async (
 
     const reader = res.body?.getReader();
     if (!reader) throw new Error('스트림 없음');
+
     const decoder = new TextDecoder('utf-8');
+
+    let buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      const text = decoder.decode(value);
-      if (text) onChunk(text);
+      const chunk = decoder.decode(value, { stream: true });
+
+      if (chunk) {
+        buffer += chunk;
+        onChunk(buffer);
+      }
     }
   } catch (err) {
     console.error(err);
