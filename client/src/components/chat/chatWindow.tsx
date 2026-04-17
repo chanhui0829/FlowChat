@@ -69,13 +69,12 @@ export default function ChatWindow({ typing, loading, onQuickSend }: ChatWindowP
 
   return (
     <div className="flex-1 min-h-0 w-full px-4 md:px-8 py-6 overflow-y-auto bg-gray-50">
+      {/* 초기 화면 */}
       {!currentChat?.messages.length && !typing && !loading && (
         <div className="h-full flex items-center justify-center">
           <div className="flex flex-col items-center">
             <div className="text-5xl mb-4">🤖</div>
-
             <h1 className="text-2xl font-semibold text-gray-800 mb-2">무엇이든 물어보세요</h1>
-
             <p className="text-gray-500 text-sm mb-6">AI와 실시간으로 대화해보세요 🚀</p>
 
             <div className="flex flex-wrap justify-center gap-2">
@@ -93,6 +92,7 @@ export default function ChatWindow({ typing, loading, onQuickSend }: ChatWindowP
         </div>
       )}
 
+      {/* 기존 메시지 */}
       {currentChat?.messages.map((msg, i) => {
         const prev = currentChat.messages[i - 1];
         const showDate = !prev || !isSameDay(prev.time, msg.time);
@@ -108,37 +108,31 @@ export default function ChatWindow({ typing, loading, onQuickSend }: ChatWindowP
             )}
 
             <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {/* USER */}
               {msg.role === 'user' ? (
                 <div className="flex flex-col items-end mb-4 max-w-[80%]">
-                  <div className="bg-gray-200 text-gray-800 px-4 py-2 rounded-2xl shadow-md break-words flex items-center">
+                  <div className="bg-gray-200 text-gray-800 px-4 py-2 rounded-2xl shadow-md">
                     <div className="whitespace-pre-wrap text-sm leading-6">
                       <MarkdownRenderer content={msg.content} />
                     </div>
                   </div>
-
                   <div className="text-[11px] text-gray-500 mt-1 pr-2">{formatTime(msg.time)}</div>
                 </div>
               ) : (
-                /* AI */
                 <div className="flex gap-3 mb-6">
-                  <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full bg-gradient-to-br from-gray-300 to-gray-400 text-sm shadow">
+                  <div className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-300">
                     🤖
                   </div>
-
-                  <div className="w-full max-w-[70%] relative group px-5 py-4 rounded-2xl bg-white border border-gray-200 shadow-md hover:shadow-lg transition">
+                  <div className="w-full max-w-[65%] sm:max-w-[75%] relative px-5 py-4 rounded-2xl bg-white border shadow-md">
                     <button
                       onClick={() => copyToClipboard(msg.content, i)}
-                      className="absolute top-2 right-3 text-xs opacity-40 hover:opacity-100 transition"
+                      className="absolute top-2 right-3 text-xs opacity-40 hover:opacity-100"
                     >
                       {copiedIndex === i ? '✅' : '📋'}
                     </button>
 
                     <div className="text-xs text-gray-400 mb-2">AI 답변</div>
 
-                    <div className="whitespace-pre-wrap break-words leading-7 text-sm text-gray-800">
-                      <MarkdownRenderer content={msg.content} />
-                    </div>
+                    <MarkdownRenderer content={msg.content} />
                   </div>
                 </div>
               )}
@@ -147,13 +141,33 @@ export default function ChatWindow({ typing, loading, onQuickSend }: ChatWindowP
         );
       })}
 
+      {/* 🔥 1. 로딩  */}
+      {loading && typing.length === 0 && (
+        <div className="flex gap-3 mb-6">
+          <div className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-300">
+            🤖
+          </div>
+
+          <div className="px-5 py-4 rounded-2xl bg-white border shadow-md">
+            <div className="text-xs text-gray-400 mb-2">AI 답변</div>
+
+            <div className="flex gap-1 text-gray-400 text-lg">
+              <span className="animate-bounce">.</span>
+              <span className="animate-bounce [animation-delay:0.2s]">.</span>
+              <span className="animate-bounce [animation-delay:0.4s]">.</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 2. 타이핑 */}
       {typing && (
         <div className="flex gap-3 mb-6">
           <div className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-300">
             🤖
           </div>
 
-          <div className="w-full max-w-[70%] px-5 py-4 rounded-2xl bg-white border border-gray-200 shadow-md">
+          <div className="w-full max-w-[70%] px-5 py-4 rounded-2xl bg-white border shadow-md">
             <div className="text-xs text-gray-400 mb-2">AI 답변</div>
 
             <div className="whitespace-pre-wrap break-words leading-7 text-sm text-gray-800">

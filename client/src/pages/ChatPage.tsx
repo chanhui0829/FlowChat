@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 
 import ChatWindow from '../components/chat/chatWindow';
@@ -26,8 +26,11 @@ function ChatPage() {
 
   const { id } = useParams();
 
+  const currentRequestId = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+
   /**
-   * 🔥 1. 먼저 chats 로드
+   * 🔥 초기 로드
    */
   useEffect(() => {
     loadChats();
@@ -35,7 +38,7 @@ function ChatPage() {
   }, []);
 
   /**
-   * 🔥 2. chats 준비된 후 id 적용
+   * 🔥 채팅 선택
    */
   useEffect(() => {
     if (id && chats.length > 0) {
@@ -43,25 +46,23 @@ function ChatPage() {
     }
   }, [id, chats]);
 
+  /**
+   * 🔥 응답 포맷
+   */
   const formatResponse = (res: MCPResponse): string => {
     if (typeof res === 'string') {
       try {
         const parsed = JSON.parse(res);
-
         if (parsed.result) return parsed.result;
         if (parsed.translated) return parsed.translated;
         if (parsed.summary) return parsed.summary;
-
         return res;
       } catch {
         return res;
       }
     }
 
-    if ('result' in res && typeof res.result === 'string') {
-      return res.result;
-    }
-
+    if ('result' in res && typeof res.result === 'string') return res.result;
     if ('translated' in res && res.translated) return res.translated as string;
     if ('summary' in res && res.summary) return res.summary as string;
     if ('todo' in res && res.todo) return res.todo as string;
@@ -74,43 +75,82 @@ function ChatPage() {
     return JSON.stringify(res);
   };
 
+  /**
+   * 🔥 메시지 전송
+   */
   const handleSend = async () => {
     if (!input.trim() || loading) return;
+
     if (!currentChatId) createChat();
+
+    const requestId = ++currentRequestId.current;
+
+    abortRef.current?.abort();
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const userInput = input;
 
     setInput('');
+    setLoading(true);
+
     addMessage({
       role: 'user',
       content: userInput,
       time: new Date().toISOString(),
     });
-    setLoading(true);
+
+    let fullText = '';
 
     try {
-      let fullText = '';
+      await sendMessageStream(
+        userInput,
+        (chunk) => {
+          if (requestId !== currentRequestId.current) return;
 
-      await sendMessageStream(userInput, (chunk) => {
-        fullText += chunk;
-        setTyping(fullText);
-      });
-      const formatted = formatResponse(fullText);
+          fullText += chunk;
+          setTyping(fullText);
+        },
+        controller.signal
+      );
+
+      if (requestId !== currentRequestId.current) return;
 
       addMessage({
         role: 'ai',
-        content: formatted,
+        content: formatResponse(fullText),
         time: new Date().toISOString(),
       });
+
       setTyping('');
-    } catch {
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        addMessage({
+          role: 'ai',
+          content: fullText
+            ? fullText + '\n\n> ⛔ 응답이 중단되었습니다'
+            : '⛔ 응답이 중단되었습니다',
+          time: new Date().toISOString(),
+        });
+
+        setTyping('');
+        setLoading(false);
+        return;
+      }
+
+      if (requestId !== currentRequestId.current) return;
       addMessage({
         role: 'ai',
         content: '❌ 오류가 발생했습니다. 다시 시도해주세요.',
         time: new Date().toISOString(),
       });
+
       setTyping('');
     } finally {
-      setLoading(false);
+      if (requestId === currentRequestId.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -124,7 +164,15 @@ function ChatPage() {
           setTimeout(() => handleSend(), 0);
         }}
       />
-      <ChatInput input={input} setInput={setInput} onSend={handleSend} />
+
+      <ChatInput
+        input={input}
+        setInput={setInput}
+        onSend={handleSend}
+        onStop={() => abortRef.current?.abort()}
+        loading={loading}
+        typing={typing}
+      />
     </div>
   );
 }

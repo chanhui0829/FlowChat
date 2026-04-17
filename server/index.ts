@@ -115,6 +115,7 @@ app.post('/mcp', async (req, res) => {
       }
     }
 
+    // ✅ DONE 제거
     res.end();
   } catch (err) {
     console.error(err);

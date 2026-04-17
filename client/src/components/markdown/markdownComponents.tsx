@@ -31,6 +31,13 @@ export const markdownComponents: Components = {
   strong({ children }) {
     return <strong className="font-semibold text-blue-600">{children}</strong>;
   },
+  blockquote({ children }) {
+    return (
+      <blockquote className="mt-3 text-xs text-gray-400 border-l-2 pl-3 border-gray-300">
+        {children}
+      </blockquote>
+    );
+  },
   code({ children }) {
     return (
       <code className="bg-gray-800 text-green-400 px-1.5 py-0.5 rounded text-xs font-mono">
