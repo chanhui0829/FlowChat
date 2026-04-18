@@ -12,7 +12,7 @@ export const sendMessage = async (prompt: string) => {
 
 export const sendMessageStream = async (
   prompt: string,
-  onChunk: (text: string) => void,
+  onChunk: (data: { chunk: string; full: string }) => void,
   signal?: AbortSignal
 ) => {
   try {
@@ -40,7 +40,11 @@ export const sendMessageStream = async (
 
       if (chunk) {
         buffer += chunk;
-        onChunk(buffer);
+
+        onChunk({
+          chunk,
+          full: buffer,
+        });
       }
     }
   } catch (err) {

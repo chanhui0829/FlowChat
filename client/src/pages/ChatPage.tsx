@@ -29,55 +29,22 @@ function ChatPage() {
   const currentRequestId = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
 
-  /**
-   * 🔥 초기 로드
-   */
   useEffect(() => {
     loadChats();
     subscribeChatStorage();
   }, []);
 
-  /**
-   * 🔥 채팅 선택
-   */
   useEffect(() => {
     if (id && chats.length > 0) {
       setCurrentChat(id);
     }
   }, [id, chats]);
 
-  /**
-   * 🔥 응답 포맷
-   */
   const formatResponse = (res: MCPResponse): string => {
-    if (typeof res === 'string') {
-      try {
-        const parsed = JSON.parse(res);
-        if (parsed.result) return parsed.result;
-        if (parsed.translated) return parsed.translated;
-        if (parsed.summary) return parsed.summary;
-        return res;
-      } catch {
-        return res;
-      }
-    }
-
-    if ('result' in res && typeof res.result === 'string') return res.result;
-    if ('translated' in res && res.translated) return res.translated as string;
-    if ('summary' in res && res.summary) return res.summary as string;
-    if ('todo' in res && res.todo) return res.todo as string;
-
-    if ('temperature' in res && res.temperature)
-      return `🌤️ ${res.city} 날씨: ${res.temperature}, ${res.condition}`;
-
-    if ('time' in res && res.time) return `⏰ 현재 시간: ${res.time}`;
-
+    if (typeof res === 'string') return res;
     return JSON.stringify(res);
   };
 
-  /**
-   * 🔥 메시지 전송
-   */
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
@@ -86,7 +53,6 @@ function ChatPage() {
     const requestId = ++currentRequestId.current;
 
     abortRef.current?.abort();
-
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -106,11 +72,14 @@ function ChatPage() {
     try {
       await sendMessageStream(
         userInput,
-        (chunk) => {
+        ({ chunk, full }) => {
           if (requestId !== currentRequestId.current) return;
 
-          fullText += chunk;
-          setTyping(fullText);
+          if (loading) setLoading(false);
+
+          fullText = full;
+
+          setTyping((prev) => prev + chunk);
         },
         controller.signal
       );
@@ -139,7 +108,6 @@ function ChatPage() {
         return;
       }
 
-      if (requestId !== currentRequestId.current) return;
       addMessage({
         role: 'ai',
         content: '❌ 오류가 발생했습니다. 다시 시도해주세요.',
@@ -171,7 +139,6 @@ function ChatPage() {
         onSend={handleSend}
         onStop={() => abortRef.current?.abort()}
         loading={loading}
-        typing={typing}
       />
     </div>
   );
