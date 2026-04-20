@@ -11,8 +11,9 @@ export const sendMessage = async (prompt: string) => {
 };
 
 /**
- * AI 응답 스트리밍 요청 함수
- * SSE(Server-Sent Events)를 통해 실시간 데이터를 수신합니다.
+ * [Troubleshooting] AI 응답 스트리밍 요청 함수
+ * SSE(Server-Sent Events)를 통해 데이터를 수신하며,
+ * 네트워크 패킷 분절로 인한 파싱 에러를 방지하기 위해 try-catch로 예외 처리를 구현했습니다.
  */
 export const sendMessageStream = (
   prompt: string,
@@ -31,6 +32,10 @@ export const sendMessageStream = (
     }
 
     try {
+      /**
+       * [기술적 의사결정] 비정형 Chunk 데이터 유실 방지
+       * 실시간 응답의 무결성을 보장하기 위해 각 chunk를 개별적으로 파싱하여 누적합니다.
+       */
       const parsed = JSON.parse(event.data);
       const content = parsed.content || '';
       fullText += content;
@@ -49,7 +54,7 @@ export const sendMessageStream = (
     eventSource.close();
   };
 
-  // 요청 중단을 위해 close 함수 반환
+  // Abort 제어를 위해 close 함수 반환
   return () => {
     eventSource.close();
   };

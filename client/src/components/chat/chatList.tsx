@@ -1,6 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiPlus, FiMoreVertical, FiTrash2, FiEdit2, FiX } from 'react-icons/fi';
+import {
+  FiPlus,
+  FiMoreVertical,
+  FiTrash2,
+  FiEdit2,
+  FiSearch,
+  FiMessageSquare,
+} from 'react-icons/fi';
+
+/* Stores */
 import { useChatStore } from '../../store/chat.store';
 
 type Props = {
@@ -11,7 +20,7 @@ type Props = {
 
 /**
  * @description 사이드바 내 채팅 세션 리스트를 관리하는 컴포넌트입니다.
- * 검색, 새 채팅 생성, 제목 수정 및 삭제 기능을 포함합니다.
+ * [Key Features]: 검색 필터링, 세션 생성/수정/삭제, 모바일 반응형 레이아웃
  */
 export default function ChatList({ setDeleteTargetId, sidebarOpen, setSidebarOpen }: Props) {
   const navigate = useNavigate();
@@ -28,7 +37,9 @@ export default function ChatList({ setDeleteTargetId, sidebarOpen, setSidebarOpe
   const menuRef = useRef<HTMLDivElement | null>(null);
   const editRef = useRef<HTMLDivElement | null>(null);
 
-  // 검색어에 따른 필터링 리스트 (Case-insensitive)
+  /**
+   * [성능 고려] 검색어에 따른 리스트 필터링
+   */
   const filteredChats = chats.filter((chat) =>
     chat.title.toLowerCase().includes(search.toLowerCase())
   );
@@ -52,17 +63,15 @@ export default function ChatList({ setDeleteTargetId, sidebarOpen, setSidebarOpe
     }
   }, [editingId, editValue, updateChatTitle]);
 
-  /* 외부 클릭 시 메뉴 및 편집창 닫기 로직 */
+  /* [UX 최적화] 외부 클릭 시 메뉴 및 편집창 자동 닫기/저장 로직 */
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
 
-      // 옵션 드롭다운 외부 클릭 시 닫기
       if (menuRef.current && !menuRef.current.contains(target)) {
         setMenuOpenId(null);
       }
 
-      // 제목 수정창 외부 클릭 시 자동 저장 및 닫기
       if (editRef.current && !editRef.current.contains(target)) {
         if (editingId) handleSaveEdit();
       }
@@ -85,70 +94,63 @@ export default function ChatList({ setDeleteTargetId, sidebarOpen, setSidebarOpe
   }, [editingId, handleSaveEdit]);
 
   return (
-    <div
+    <aside
       className={`
-        fixed md:static z-40
-        w-[280px] h-full bg-white border-r p-4 flex flex-col
-        transform transition-transform duration-300 ease-in-out
+        fixed inset-y-0 left-0 z-40 w-72 bg-slate-50 border-r border-slate-200/60 transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0
       `}
     >
-      {/* Mobile Close Button */}
-      <div className="md:hidden flex justify-end mb-2">
+      <div className="flex flex-col h-full p-4">
+        {/* Mobile Close Button */}
+
+        {/* New Chat Button: 사진처럼 볼드하고 블루포인트 강조 */}
         <button
-          onClick={() => setSidebarOpen(false)}
-          className="p-2 hover:bg-gray-100 rounded-full transition"
+          onClick={async () => {
+            const newId = await createChat();
+            if (newId) {
+              navigate(`/chat/${newId}`);
+              setSidebarOpen(false);
+            }
+          }}
+          className="flex items-center justify-center gap-2 w-full py-3 mb-6 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold shadow-lg shadow-blue-200 transition-all active:scale-[0.98]"
         >
-          ✕
+          <FiPlus strokeWidth={3} size={18} />
+          <span>새 채팅</span>
         </button>
-      </div>
 
-      {/* Search Bar */}
-      <div className="relative mb-3">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="검색어를 입력해주세요"
-          className="w-full pl-3 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
-        />
-      </div>
+        {/* Search Bar: 미니멀한 디자인 */}
+        <div className="relative mb-6">
+          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+          <input
+            type="text"
+            placeholder="채팅 검색"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+          />
+        </div>
 
-      {/* New Chat Button */}
-      <button
-        onClick={async () => {
-          const newId = await createChat();
-          if (newId) {
-            navigate(`/chat/${newId}`);
-            setSidebarOpen(false);
-          }
-        }}
-        className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 pr-2 mb-6 rounded-lg shadow-sm transition-all active:scale-[0.98]"
-      >
-        <FiPlus size={18} />
-        <span>새 채팅</span>
-      </button>
+        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-1">
+          최근 채팅
+        </div>
 
-      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">
-        Recent Chats
-      </div>
+        {/* Chat Session List */}
+        <div className="flex-1 overflow-y-auto space-y-1 p-1 sidebar-scroll">
+          {filteredChats.map((chat) => {
+            const isSelected = chat.id === currentChatId;
+            const isEditing = editingId === chat.id;
 
-      {/* Chat Session List */}
-      <div className="flex-1 overflow-y-auto space-y-1 sidebar-scroll pr-1">
-        {filteredChats.map((chat) => {
-          const isSelected = chat.id === currentChatId;
-          const isEditing = editingId === chat.id;
-
-          return (
-            <div
-              key={chat.id}
-              className={`
-                relative group flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all
-                ${isSelected ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-600'}
-              `}
-            >
+            return (
               <div
-                className="flex-1 min-w-0 flex items-center"
+                key={chat.id}
+                className={`
+                  group relative flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all
+                  ${
+                    isSelected
+                      ? 'bg-white shadow-sm ring-1 ring-slate-200'
+                      : 'hover:bg-slate-200/50'
+                  }
+                `}
                 onClick={() => {
                   if (isEditing) return;
                   navigate(`/chat/${chat.id}`);
@@ -156,95 +158,101 @@ export default function ChatList({ setDeleteTargetId, sidebarOpen, setSidebarOpe
                   setSidebarOpen(false);
                 }}
               >
-                {isEditing ? (
-                  <div ref={editRef} className="flex items-center gap-1 w-full mr-2">
-                    <input
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                      className="flex-1 w-0 min-w-0 px-2 py-0.5 text-sm border-2 border-blue-400 rounded outline-none bg-white"
-                      autoFocus
-                    />
-                    <FiX
-                      className="text-gray-400 hover:text-red-500 transition-colors"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingId(null);
-                      }}
-                    />
-                  </div>
-                ) : (
-                  /* [UI Detail] Truncate 적용으로 긴 제목 처리 */
-                  <span className="text-sm font-medium truncate pr-2">{chat.title}</span>
+                {/* Active Indicator */}
+                {isSelected && (
+                  <div className="absolute left-0 w-1 h-6 bg-blue-600 rounded-r-full" />
                 )}
-              </div>
 
-              {/* Action Menu (Hover 시 노출) */}
-              {!isEditing && (
-                <div className="relative shrink-0">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMenuOpenId((prev) => (prev === chat.id ? null : chat.id));
-                    }}
-                    className={`p-1 rounded hover:bg-gray-200 transition ${
-                      isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                    }`}
-                  >
-                    <FiMoreVertical size={14} />
-                  </button>
+                <FiMessageSquare
+                  className={isSelected ? 'text-blue-600' : 'text-slate-400'}
+                  size={18}
+                />
 
-                  {menuOpenId === chat.id && (
-                    <div
-                      ref={menuRef}
-                      className="absolute right-0 top-7 z-50 bg-white border border-gray-100 rounded-xl shadow-xl w-36 py-1 overflow-hidden"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        onClick={() => {
-                          setEditingId(chat.id);
-                          setEditValue(chat.title);
-                          setMenuOpenId(null);
-                        }}
-                        className="flex items-center gap-2 w-full px-4 py-2.5 text-xs text-gray-600 hover:bg-gray-50 transition"
-                      >
-                        <FiEdit2 size={12} /> 제목 변경
-                      </button>
-                      <button
-                        onClick={() => {
-                          setDeleteTargetId(chat.id);
-                          setMenuOpenId(null);
-                        }}
-                        className="flex items-center gap-2 w-full px-4 py-2.5 text-xs text-red-500 hover:bg-red-50 transition"
-                      >
-                        <FiTrash2 size={12} /> 채팅 삭제
-                      </button>
+                <div className="flex-1 min-w-0">
+                  {isEditing ? (
+                    <div ref={editRef} className="flex items-center gap-1 w-full">
+                      <input
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                        className="w-full px-2 py-0.5 text-sm border-none bg-slate-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20"
+                        autoFocus
+                      />
                     </div>
+                  ) : (
+                    <span
+                      className={`text-sm truncate block ${
+                        isSelected ? 'font-bold text-slate-900' : 'text-slate-600'
+                      }`}
+                    >
+                      {chat.title}
+                    </span>
                   )}
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
 
-      {/* Project/Case Study Section */}
-      <div className="pt-2 mt-2 border-t border-gray-100">
-        <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">
-          Case Study
+                {/* Action Menu */}
+                {!isEditing && (
+                  <div className="relative shrink-0" ref={menuOpenId === chat.id ? menuRef : null}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpenId((prev) => (prev === chat.id ? null : chat.id));
+                      }}
+                      className={`p-1 rounded-md hover:bg-slate-200 transition ${
+                        isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                      }`}
+                    >
+                      <FiMoreVertical size={14} className="text-slate-400" />
+                    </button>
+
+                    {menuOpenId === chat.id && (
+                      <div className="absolute right-0 top-8 z-50 w-32 bg-white border border-slate-100 rounded-xl shadow-xl py-2 animate-in fade-in zoom-in-95">
+                        <button
+                          onClick={() => {
+                            setEditingId(chat.id);
+                            setEditValue(chat.title);
+                            setMenuOpenId(null);
+                          }}
+                          className="flex items-center gap-2 w-full px-4 py-2 text-xs text-slate-600 hover:bg-slate-50 transition"
+                        >
+                          <FiEdit2 size={12} /> 제목 변경
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDeleteTargetId(chat.id);
+                            setMenuOpenId(null);
+                          }}
+                          className="flex items-center gap-2 w-full px-4 py-2 text-xs text-red-500 hover:bg-red-50 transition"
+                        >
+                          <FiTrash2 size={12} /> 채팅 삭제
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <button
-          className="w-full flex items-center justify-between px-3 py-3 rounded-xl bg-gray-50 hover:bg-gray-100 text-sm font-semibold text-gray-700 transition-all active:scale-[0.98]"
-          onClick={() => {
-            setCurrentChat(null);
-            navigate('/case-study');
-            setSidebarOpen(false);
-          }}
-        >
-          <span>🚀 프로젝트 상세 보기</span>
-          <span className="text-gray-300">→</span>
-        </button>
+
+        {/* Case Study Section: 사진 하단처럼 명확한 구분과 버튼형 디자인 */}
+        <div className="pt-2 mt-2 border-t border-slate-200">
+          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-1">
+            Case Study
+          </div>
+          <button
+            className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl bg-slate-900 hover:bg-black text-white text-sm font-bold transition-all active:scale-[0.98] shadow-lg shadow-slate-200"
+            onClick={() => {
+              setCurrentChat(null);
+              navigate('/case-study');
+              setSidebarOpen(false);
+            }}
+          >
+            <span>🚀 프로젝트 상세 보기</span>
+            <span className="opacity-50">→</span>
+          </button>
+        </div>
       </div>
-    </div>
+    </aside>
   );
 }

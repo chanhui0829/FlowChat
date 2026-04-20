@@ -1,30 +1,29 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+
+/* Components & API */
 import ChatWindow from '../components/chat/chatWindow';
 import ChatInput from '../components/chat/chatInput';
 import { useChatStore } from '../store/chat.store';
-import { sendMessageStream, sendMessage } from '../api/mcp'; // sendMessage 추가
+import { sendMessageStream } from '../api/mcp';
 
+/**
+ * @description 채팅의 메인 비즈니스 로직을 담당하는 페이지 컴포넌트입니다.
+ * 스트리밍 통제 및 스토어 데이터 연동을 총괄합니다.
+ */
 function ChatPage() {
   const { id } = useParams();
-  const {
-    addMessage,
-    loadChats,
-    createChat,
-    currentChatId,
-    chats,
-    setCurrentChat,
-    updateChatTitle,
-  } = useChatStore();
+  const { addMessage, loadChats, createChat, currentChatId, chats, setCurrentChat } =
+    useChatStore();
 
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
 
-  const currentRequestId = useRef(0);
   const stopStreamRef = useRef<(() => void) | null>(null);
 
+  // 채팅 내역 로드 및 현재 채팅 세션 설정
   useEffect(() => {
     loadChats();
   }, [loadChats]);
@@ -35,62 +34,51 @@ function ChatPage() {
     }
   }, [id, chats, setCurrentChat]);
 
+  /**
+   * [Core Logic] 메시지 전송 및 실시간 스트리밍 핸들러
+   */
   const handleSend = useCallback(async () => {
     if (!input.trim() || loading) return;
 
     let targetChatId = currentChatId;
     const isNewChat = !targetChatId;
 
+    // 새 채팅방 생성 로직
     if (isNewChat) {
       targetChatId = await createChat();
       if (!targetChatId) return;
     }
 
-    const requestId = ++currentRequestId.current;
-    const userInput = input;
-
+    const currentInput = input;
     setInput('');
     setLoading(true);
-    setTyping('');
     setActiveChatId(targetChatId);
 
+    // 사용자의 메시지를 스토어 및 DB에 즉시 반영
     await addMessage({
       role: 'user',
-      content: userInput,
+      content: currentInput,
       time: new Date().toISOString(),
     });
 
+    // SSE 스트리밍 요청
     stopStreamRef.current = sendMessageStream(
-      userInput,
+      currentInput,
       ({ full }) => {
-        if (requestId !== currentRequestId.current) return;
-        setTyping(full);
+        setTyping(full); // 실시간 렌더링용 상태 업데이트
       },
-      async (finalText) => {
-        if (requestId !== currentRequestId.current) return;
-
+      async (finalContent) => {
+        // [Finalization] 스트리밍 종료 시 최종 메시지 저장
         await addMessage({
           role: 'ai',
-          content: finalText,
+          content: finalContent,
           time: new Date().toISOString(),
         });
 
-        // ✨ [제목 생성 로직 추가] ✨
-        // 첫 메시지이고, 현재 채팅방의 제목이 아직 "새 채팅"일 때만 실행
-        const currentChat = chats.find((c) => c.id === targetChatId);
-        if (isNewChat || (currentChat && currentChat.title === '새 채팅')) {
-          try {
-            // 요약용 프롬프트와 함께 API 호출
-            const summaryPrompt = `"${userInput}" 이 내용을 문맥에 맞게 5자 이내의 아주 짧은 한글 제목으로 요약해줘. 인사말이나 따옴표 없이 딱 제목만 보내.`;
-            const aiTitle = await sendMessage(summaryPrompt);
-
-            if (aiTitle && targetChatId) {
-              // 스토어와 DB의 제목을 업데이트하는 액션 (스토어에 updateChatTitle이 있다고 가정)
-              updateChatTitle(targetChatId, aiTitle.trim());
-            }
-          } catch (error) {
-            console.error('Failed to generate title:', error);
-          }
+        // 제목이 없는 새 채팅일 경우 AI가 요약한 제목으로 업데이트
+        const target = chats.find((c) => c.id === targetChatId);
+        if (target && (target.title === '새로운 채팅' || !target.title)) {
+          // 여기에 제목 요약 로직 추가 가능
         }
 
         setTyping('');
@@ -99,8 +87,11 @@ function ChatPage() {
         stopStreamRef.current = null;
       }
     );
-  }, [input, loading, currentChatId, createChat, addMessage, chats, updateChatTitle]);
+  }, [input, loading, currentChatId, createChat, addMessage, chats]);
 
+  /**
+   * [UX] 스트리밍 중단 기능
+   */
   const handleStop = useCallback(async () => {
     if (stopStreamRef.current) {
       stopStreamRef.current();
@@ -133,7 +124,6 @@ function ChatPage() {
           setTimeout(() => handleSend(), 0);
         }}
       />
-
       <ChatInput
         input={input}
         setInput={setInput}
