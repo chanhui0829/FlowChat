@@ -10,6 +10,10 @@ export const sendMessage = async (prompt: string) => {
   return data.result;
 };
 
+/**
+ * AI 응답 스트리밍 요청 함수
+ * SSE(Server-Sent Events)를 통해 실시간 데이터를 수신합니다.
+ */
 export const sendMessageStream = (
   prompt: string,
   onChunk: (data: { chunk: string; full: string }) => void,
@@ -17,7 +21,6 @@ export const sendMessageStream = (
 ) => {
   const url = `${MCP_URL}?prompt=${encodeURIComponent(prompt)}`;
   const eventSource = new EventSource(url);
-
   let fullText = '';
 
   eventSource.onmessage = (event) => {
@@ -30,7 +33,6 @@ export const sendMessageStream = (
     try {
       const parsed = JSON.parse(event.data);
       const content = parsed.content || '';
-
       fullText += content;
 
       onChunk({
@@ -38,15 +40,16 @@ export const sendMessageStream = (
         full: fullText,
       });
     } catch (err) {
-      console.error('Parsing error', err);
+      console.error('SSE Parsing error:', err);
     }
   };
 
   eventSource.onerror = (err) => {
-    console.error('SSE error', err);
+    console.error('SSE connection error:', err);
     eventSource.close();
   };
 
+  // 요청 중단을 위해 close 함수 반환
   return () => {
     eventSource.close();
   };

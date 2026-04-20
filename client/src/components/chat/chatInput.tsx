@@ -69,7 +69,7 @@ export default function ChatInput({ input, setInput, onSend, onStop, loading, ty
     shadow-md
     transition
     shrink-0
-    ${loading ? 'bg-red-500 hover:bg-red-400' : 'bg-blue-500 hover:bg-blue-400'}
+    ${loading ? 'bg-red-500 hover:bg-red-400' : 'bg-blue-500 hover:bg-blue-600'}
   `}
         >
           {isStreaming ? <FiSquare /> : <FiSend />}

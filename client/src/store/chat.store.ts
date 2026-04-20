@@ -23,6 +23,7 @@ type ChatStore = {
   setCurrentChat: (id: string | null) => void;
   addMessage: (msg: Message) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
+  updateChatTitle: (id: string, newTitle: string) => Promise<void>;
 };
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -45,15 +46,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     // DB 데이터를 스토어 형식에 맞게 변환
+    // loadChats 내 데이터 변환 로직 부분
     const formattedChats: Chat[] = sessions.map((s) => ({
       id: s.id,
       title: s.title,
       messages: (s.chat_messages || []).map(
-        (m: { role: string; content: string; created_at: string }) => ({
-          role: m.role === 'assistant' ? 'ai' : 'user',
-          content: m.content,
-          time: new Date(m.created_at).toLocaleTimeString(),
-        })
+        (m: { role: string; content: string; created_at: string }) => {
+          const date = m.created_at ? new Date(m.created_at) : new Date();
+
+          return {
+            role: m.role === 'assistant' ? 'ai' : 'user',
+            content: m.content,
+            time: isNaN(date.getTime())
+              ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          };
+        }
       ),
     }));
 
@@ -128,7 +136,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           messages: [
             {
               role: 'user',
-              content: `"${msg.content}" \n\n 위 내용을 보고 아주 핵심적인 키워드만 뽑아서 5자 이내의 짧은 제목으로 요약해줘. 인사말이나 따옴표 없이 딱 제목만 대답해.`,
+              content: `
+              사용자의 질문: "${msg.content}"
+              
+              위 내용을 바탕으로 사이드바에 표시할 짧은 제목을 만들어줘.
+              안내사항:
+              1. 조사(은/는/이/가)를 생략한 '명사형'으로 작성할 것 (예: "React 훅 비교", "useEffect 가이드")
+              2. 반드시 5~8자 사이로 작성하고, 절대 따옴표나 마침표를 넣지 마.
+              3. 질문 내용을 그대로 복사하지 말고 핵심 키워드로 요약해.
+              제목:`,
             },
           ],
         }),
