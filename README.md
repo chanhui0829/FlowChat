@@ -63,10 +63,10 @@
 **1. 서버 실행 (API Proxy)**
 - cd server
 - npm install
-- node server.js
+- npm run dev
 
 **2. 클라이언트 실행**
-- cd ..
+- ../client
 - npm install
 - npm run dev
 
