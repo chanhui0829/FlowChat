@@ -74,21 +74,23 @@ function ChatPage() {
           content: finalContent,
           time: new Date().toISOString(),
         });
-        const targetChat = chats.find((c) => c.id === targetChatId);
-        if (
-          targetChat &&
-          (targetChat.title === '새로운 채팅' || targetChat.title === '새로운 대화')
-        ) {
+        const currentChat = chats.find((c) => c.id === targetChatId);
+
+        const isInitialChat =
+          currentChat?.title.includes('새로운') || currentChat?.messages.length <= 2;
+        if (targetChatId && isInitialChat) {
           try {
-            // 서버에 요약 요청 (getChatSummary 함수 활용)
+            console.log('요약 요청 시작...'); // 배포 환경 콘솔확인
             const newTitle = await getChatSummary(currentInput);
-            // 스토어의 updateChatTitle로 DB와 UI 업데이트
-            await updateChatTitle(targetChatId, newTitle);
+
+            if (newTitle && newTitle !== '새로운 대화') {
+              await updateChatTitle(targetChatId, newTitle);
+              console.log('제목 업데이트 완료:', newTitle);
+            }
           } catch (error) {
-            console.error('제목 생성 실패:', error);
+            console.error('요약 프로세스 에러:', error);
           }
         }
-
         setTyping('');
         setLoading(false);
         setActiveChatId(null);
