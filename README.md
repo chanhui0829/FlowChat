@@ -1,7 +1,7 @@
-# 💬 FlowChat (v2.0)
+# 💬 FlowChat
 
 **Supabase와 OpenRouter API를 활용한 실시간 스트리밍 AI 채팅 플랫폼**입니다.  
-단순한 기능 구현을 넘어, **도메인 기반 설계(Feature-based Architecture)**와 **실시간 데이터 스트리밍 처리**를 통해 확장성 있는 프론트엔드 아키텍처를 구축하는 데 집중했습니다.
+단순한 기능 구현을 넘어, **도메인 기반 설계(Feature-based Architecture)** 와 **실시간 데이터 스트리밍 처리**를 통해 확장성 있는 프론트엔드 아키텍처를 구축하는 데 집중했습니다.
 
 ---
 
