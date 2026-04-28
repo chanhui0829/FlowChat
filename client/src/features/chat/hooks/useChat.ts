@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { useChatStore } from '../../../store/chat.store';
-import { sendMessageStream, getChatSummary } from '../../../api/mcp';
+import { sendMessageStream, getChatSummary } from '../api/chatApi';
 
 export const useChat = () => {
   const { addMessage, createChat, currentChatId, chats, updateChatTitle } = useChatStore();
