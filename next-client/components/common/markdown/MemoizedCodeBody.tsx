@@ -1,26 +1,25 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useEffect, useRef } from 'react';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/themes/prism-tomorrow.css';
 
 const MemoizedCodeBody = memo(({ codeContent }: { codeContent: string }) => {
-  const renderCodeWithComments = (text: string) => {
-    const parts = text.split(/(\/\/.*|\/\*[\s\S]*?\*\/)/g);
-    return parts.map((part, i) => {
-      if (part.startsWith('//') || part.startsWith('/*')) {
-        return (
-          <span key={i} className="text-slate-500 italic opacity-70">
-            {part}
-          </span>
-        );
-      }
-      return part;
-    });
-  };
+  const codeRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (codeRef.current) {
+      Prism.highlightElement(codeRef.current);
+    }
+  }, [codeContent]);
 
   return (
-    <code className="block whitespace-pre-wrap break-all">
-      {renderCodeWithComments(codeContent)}
-    </code>
+    <pre>
+      <code ref={codeRef} className="language-javascript">
+        {codeContent}
+      </code>
+    </pre>
   );
 });
 

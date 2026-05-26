@@ -9,8 +9,12 @@ import type { Chat, Message, DBChatMessage } from './types/chat';
 interface ChatState {
   chats: Chat[];
   currentChatId: string | null;
-  isLoading: boolean;
+  isLoadingChats: boolean; // 채팅 목록 로딩
+  isCreatingChat: boolean; // 채팅방 생성 중
+  isSavingMessage: boolean; // 메시지 저장 중
+  isStreaming: boolean;
   error: string | null;
+  getIsSending: () => boolean;
 }
 
 interface ChatActions {
@@ -20,6 +24,7 @@ interface ChatActions {
   addMessage: (sessionId: string, msg: Message) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
   updateChatTitle: (id: string, newTitle: string) => Promise<void>;
+  setIsStreaming: (status: boolean) => void;
 }
 
 interface ChatSessionResponse {
@@ -39,17 +44,24 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
   /* --- Initial State --- */
   chats: [],
   currentChatId: null,
-  isLoading: false,
+  isLoadingChats: false, // 기본값 false
+  isCreatingChat: false,
+  isSavingMessage: false,
+  isStreaming: false,
+  setIsStreaming: (status: boolean) => set({ isStreaming: status }),
+  getIsSending: () => {
+    const state = get();
+    return state.isCreatingChat || state.isSavingMessage;
+  },
   error: null,
 
   /* --- Actions --- */
-
   /**
    * 전체 채팅 세션 로드 및 초기화
-   * [Performance] API 응답 데이터를 Service 레이어의 Mapper를 통해 규격화된 타입으로 정제합니다.
+   *  API 응답 데이터를 Service 레이어의 Mapper를 통해 규격화된 타입으로 정제합니다.
    */
   loadChats: async () => {
-    set({ isLoading: true, error: null });
+    set({ isLoadingChats: true, error: null });
     try {
       const rawSessions = await chatService.fetchSessions();
       const sessions = rawSessions as ChatSessionResponse[];
@@ -67,7 +79,7 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
       set({ error: message });
       console.error('[Store: loadChats Error]', error);
     } finally {
-      set({ isLoading: false });
+      set({ isLoadingChats: false });
     }
   },
 
@@ -81,6 +93,7 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
    * 생성 즉시 로컬 상태에 반영하여 대화 시작 지연 시간을 최소화합니다.
    */
   createChat: async () => {
+    set({ isCreatingChat: true });
     try {
       const data = await chatService.createSession('새로운 채팅');
       const newChat: Chat = { id: data.id, title: data.title, messages: [] };
@@ -96,6 +109,8 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
       set({ error: message });
       console.error('[Store: createChat Error]', error);
       return null;
+    } finally {
+      set({ isCreatingChat: false });
     }
   },
 
@@ -104,6 +119,7 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
    * [UX Strategy] 낙관적 업데이트를 적용하여 실시간 대화 흐름의 속도감을 확보합니다.
    */
   addMessage: async (sessionId: string, msg: Message) => {
+    set({ isSavingMessage: true });
     const { chats } = get();
     const currentChat = chats.find((c) => c.id === sessionId);
     if (!currentChat) return;
@@ -121,6 +137,8 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
     } catch (error) {
       // 실무에서는 여기서 에러 발생 시 UI를 롤백하거나 에러 토스트를 띄우는 로직을 추가합니다.
       console.error('[Store: addMessage Sync Error]', error);
+    } finally {
+      set({ isSavingMessage: false }); // 로딩 종료
     }
   },
 

@@ -22,14 +22,9 @@ interface ChatListProps {
   sidebarOpen: boolean;
   setSidebarOpen: (v: boolean) => void;
 }
-
 /**
  * @description 채팅 히스토리 및 내비게이션을 담당하는 사이드바 컴포넌트
- * [Portfolio Highlights]
- * 1. Logic Separation: useChatListLogic 커스텀 훅을 통한 관심사 분리(SoC).
- * 2. Adaptive UI: 모바일과 데스크탑 환경에 최적화된 반응형 레이아웃 제공.
- * 3. User Experience: 하단 고정 메뉴를 통해 기술적 자산(Case Study)에 대한 접근성 강화.
- */
+ *  */
 export default function ChatList({
   setDeleteTargetId,
   sidebarOpen,
@@ -37,7 +32,15 @@ export default function ChatList({
 }: ChatListProps) {
   const router = useRouter();
   const { state, actions, refs } = useChatListLogic(setSidebarOpen);
-  const { isLoading, error } = useChatStore();
+  const { isLoadingChats, error } = useChatStore();
+  const isStreaming = useChatStore((state) => state.isStreaming);
+  const isCreatingChat = useChatStore((state) => state.isCreatingChat);
+  const isSavingMessage = useChatStore((state) => state.isSavingMessage);
+
+  // 채팅 전환 비활성화 조건
+  const isDisabled = isStreaming || isCreatingChat || isSavingMessage;
+
+  // isStreaming이 true일 때 New Conversation과 채팅 선택을 비활성화
 
   return (
     <aside
@@ -48,18 +51,26 @@ export default function ChatList({
     `}
     >
       <div className="flex flex-col h-full px-5 py-6">
-        {/* 상단: 액션 버튼 영역 */}
+        {/* New Conversation 버튼: 스트리밍 중 비활성화 */}
         <div className="mb-8">
           <button
             onClick={actions.handleCreateChat}
-            className="group w-full py-3.5 flex items-center justify-center gap-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-50 rounded-2xl font-semibold shadow-lg transition-all active:scale-[0.96]"
+            disabled={isDisabled}
+            className={`
+              group w-full py-3.5 flex items-center justify-center gap-2.5 rounded-2xl font-semibold shadow-lg transition-all active:scale-[0.96]
+              ${
+                isStreaming
+                  ? 'bg-zinc-300 text-zinc-500 cursor-not-allowed shadow-none'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-50'
+              }
+            `}
           >
             <FiPlus size={16} />
             <span>New Conversation</span>
           </button>
         </div>
 
-        {/* 중단: 필터링 검색 영역 */}
+        {/* 검색 */}
         <div className="relative mb-6">
           <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
           <input
@@ -79,10 +90,17 @@ export default function ChatList({
           </div>
         )}
 
-        {/* 메인: 채팅 히스토리 리스트 (Scroll Area) */}
+        {/* 스트리밍 중 안내 배너 */}
+        {isDisabled && (
+          <div className="mb-4 flex items-center gap-2.5 px-4 py-3 bg-zinc-100 border border-zinc-200 rounded-2xl text-zinc-500 text-xs font-medium">
+            <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-pulse shrink-0" />
+            AI 응답 중에는 채팅을 전환할 수 없어요
+          </div>
+        )}
+
+        {/* 채팅 목록 */}
         <div className="flex-1 overflow-y-auto space-y-1 pr-1 sidebar-scroll">
-          {/* 로딩 스켈레톤 */}
-          {isLoading ? (
+          {isLoadingChats ? (
             <div className="space-y-2 pt-1">
               {[1, 2, 3, 4].map((i) => (
                 <div
@@ -107,6 +125,7 @@ export default function ChatList({
                 handleSaveEdit={actions.handleSaveEdit}
                 setDeleteTargetId={setDeleteTargetId}
                 onSelect={() => actions.handleChatSelect(chat.id)}
+                isSelectDisabled={isDisabled}
                 menuRef={refs.menuRef}
                 editRef={refs.editRef}
               />
@@ -114,7 +133,7 @@ export default function ChatList({
           )}
         </div>
 
-        {/* 하단: 케이스 스터디 이동 버튼 (Fixed Bottom) */}
+        {/* 하단 케이스 스터디 버튼 */}
         <div className="mt-auto pt-6 border-t border-zinc-200/50">
           <button
             onClick={() => {
@@ -132,7 +151,8 @@ export default function ChatList({
   );
 }
 
-/* --- 하위 컴포넌트: ChatItem (개별 리스트 아이템) --- */
+// ─── ChatItem ────────────────────────────────────────────────────────────────
+
 interface ChatItemProps {
   chat: Chat;
   isSelected: boolean;
@@ -145,102 +165,110 @@ interface ChatItemProps {
   handleSaveEdit: () => Promise<void>;
   setDeleteTargetId: (id: string) => void;
   onSelect: () => void;
+  isSelectDisabled: boolean;
   menuRef: React.RefObject<HTMLDivElement | null>;
   editRef: React.RefObject<HTMLDivElement | null>;
 }
 
-/**
- * [Optimization] React.memo를 사용하여 불필요한 리렌더링을 방지
- */
-const ChatItem = memo(
-  ({
-    chat,
-    isSelected,
-    isEditing,
-    menuOpenId,
-    setMenuOpenId,
-    setEditingId,
-    setEditValue,
-    editValue,
-    handleSaveEdit,
-    setDeleteTargetId,
-    onSelect,
-    menuRef,
-    editRef,
-  }: ChatItemProps) => {
-    return (
-      <div
-        className={`group relative flex items-center gap-3.5 px-4 py-3.5 rounded-2xl cursor-pointer transition-all ${
-          isSelected ? 'bg-white shadow-sm ring-1 ring-zinc-200/50' : 'hover:bg-zinc-200/40'
-        }`}
-        onClick={onSelect}
-      >
-        <FiMessageSquare className={isSelected ? 'text-zinc-900' : 'text-zinc-400'} size={18} />
+const ChatItem = memo(function ChatItem({
+  chat,
+  isSelected,
+  isEditing,
+  menuOpenId,
+  setMenuOpenId,
+  setEditingId,
+  setEditValue,
+  editValue,
+  handleSaveEdit,
+  setDeleteTargetId,
+  onSelect,
+  isSelectDisabled,
+  menuRef,
+  editRef,
+}: ChatItemProps) {
+  return (
+    <div
+      className={`
+        group relative flex items-center gap-3.5 px-4 py-3.5 rounded-2xl transition-all
+        ${isSelectDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
+        ${
+          isSelected
+            ? 'bg-white shadow-sm ring-1 ring-zinc-200/50'
+            : !isSelectDisabled
+            ? 'hover:bg-zinc-200/40'
+            : ''
+        }
+      `}
+      onClick={() => !isSelectDisabled && onSelect()}
+    >
+      <FiMessageSquare className={isSelected ? 'text-zinc-900' : 'text-zinc-400'} size={18} />
 
-        <div className="flex-1 min-w-0">
-          {isEditing ? (
-            <div ref={editRef} onClick={(e) => e.stopPropagation()}>
-              <input
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                className="w-full bg-zinc-100 rounded-lg px-2 py-1 text-sm outline-none ring-2 ring-zinc-900/10"
-                autoFocus
-              />
-            </div>
-          ) : (
-            <span
-              className={`text-[13.5px] truncate block ${
-                isSelected ? 'font-bold text-zinc-900' : 'text-zinc-500'
-              }`}
-            >
-              {chat.title}
-            </span>
-          )}
-        </div>
-
-        {!isEditing && (
-          <div className="relative shrink-0" ref={menuOpenId === chat.id ? menuRef : null}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpenId(menuOpenId === chat.id ? null : chat.id);
-              }}
-              className={`p-1.5 rounded-xl hover:bg-zinc-100 transition-all ${
-                isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-            >
-              <FiMoreVertical size={14} className="text-zinc-400" />
-            </button>
-
-            {menuOpenId === chat.id && (
-              <div className="absolute right-0 top-10 z-[100] w-32 bg-white border border-zinc-200 rounded-xl shadow-xl py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditingId(chat.id);
-                    setEditValue(chat.title);
-                    setMenuOpenId(null);
-                  }}
-                  className="flex items-center gap-2 w-full px-3 py-2.5 text-[12px] text-zinc-600 hover:bg-zinc-50 transition-colors"
-                >
-                  <FiEdit2 size={12} /> 수정
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteTargetId(chat.id);
-                    setMenuOpenId(null);
-                  }}
-                  className="flex items-center gap-2 w-full px-3 py-2.5 text-[12px] text-red-500 hover:bg-red-50 transition-colors"
-                >
-                  <FiTrash2 size={12} /> 삭제
-                </button>
-              </div>
-            )}
+      <div className="flex-1 min-w-0">
+        {isEditing ? (
+          <div ref={editRef} onClick={(e) => e.stopPropagation()}>
+            <input
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+              className="w-full bg-zinc-100 rounded-lg px-2 py-1 text-sm outline-none ring-2 ring-zinc-900/10"
+              autoFocus
+            />
           </div>
+        ) : (
+          <span
+            className={`text-[13.5px] truncate block ${
+              isSelected ? 'font-bold text-zinc-900' : 'text-zinc-500'
+            }`}
+          >
+            {chat.title}
+          </span>
         )}
       </div>
-    );
-  }
-);
+
+      {/* 편집/삭제 메뉴: isSelectDisabled(스트리밍 중)에도 허용 */}
+      {!isEditing && (
+        <div
+          className="relative shrink-0"
+          ref={menuOpenId === chat.id ? menuRef : null}
+          onClick={(e) => e.stopPropagation()} // 메뉴 클릭이 채팅 선택으로 버블링 방지
+        >
+          <button
+            onClick={() => setMenuOpenId(menuOpenId === chat.id ? null : chat.id)}
+            className={`p-1.5 rounded-xl hover:bg-zinc-100 transition-all ${
+              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
+          >
+            <FiMoreVertical size={14} className="text-zinc-400" />
+          </button>
+
+          {menuOpenId === chat.id && (
+            <div className="absolute right-0 top-10 z-[100] w-32 bg-white border border-zinc-200 rounded-xl shadow-xl py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+              <button
+                onClick={() => {
+                  setEditingId(chat.id);
+                  setEditValue(chat.title);
+                  setMenuOpenId(null);
+                }}
+                className="flex items-center gap-2 w-full px-3 py-2.5 text-[12px] text-zinc-600 hover:bg-zinc-50 transition-colors"
+              >
+                <FiEdit2 size={12} /> 수정
+              </button>
+              <button
+                onClick={() => {
+                  setDeleteTargetId(chat.id);
+                  setMenuOpenId(null);
+                }}
+                className="flex items-center gap-2 w-full px-3 py-2.5 text-[12px] text-red-500 hover:bg-red-50 transition-colors"
+              >
+                <FiTrash2 size={12} /> 삭제
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// eslint에서 memo 컴포넌트 displayName 경고 방지
+ChatItem.displayName = 'ChatItem';

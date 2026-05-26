@@ -1,127 +1,152 @@
+// useChat.ts 전체
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useChatStore } from '../lib/store';
 import { sendMessageStream, getChatSummary } from '../lib/api/chatApi';
 
 export const useChat = () => {
-  const { addMessage, createChat, currentChatId, updateChatTitle } = useChatStore();
+  const { addMessage, createChat, updateChatTitle, setIsStreaming } = useChatStore();
+
   const getState = useChatStore.getState;
 
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [lastQuickSendText, setLastQuickSendText] = useState<string | null>(null);
 
+  // input을 ref로도 추적 → handleSend deps에서 input 제거 가능
+  const inputRef = useRef('');
+  const typingRef = useRef('');
   const stopStreamRef = useRef<(() => void) | null>(null);
 
-  // 메시지 전송 로직
-  const handleSend = useCallback(async () => {
-    if (!input.trim() || loading) return;
+  // setInput을 감싸서 ref도 동기 업데이트
+  const handleSetInput = useCallback((value: string) => {
+    inputRef.current = value;
+    setInput(value);
+  }, []);
 
-    let targetChatId = currentChatId;
+  const handleSend = useCallback(
+    async (overrideInput?: string) => {
+      const textToSend = overrideInput ?? inputRef.current; // ref에서 읽음
 
-    if (!targetChatId) {
-      targetChatId = await createChat();
-      if (!targetChatId) return;
-    }
+      const { isStreaming, isCreatingChat, isSavingMessage } = getState();
+      const isSending = isCreatingChat || isSavingMessage;
 
-    const currentInput = input;
-    setInput('');
-    setLoading(true);
-    setActiveChatId(targetChatId);
+      if (!textToSend.trim() || isSending || isStreaming) return;
 
-    await addMessage(targetChatId, {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: currentInput,
-      time: new Date().toISOString(),
-    });
+      let targetChatId = getState().currentChatId;
 
-    // [Bug Fix] addMessage 이후 최신 상태를 Zustand getState()로 직접 읽어 stale closure 방지
-    const freshChats = getState().chats;
-    const currentChat = freshChats.find((c) => c.id === targetChatId);
-    const history = currentChat?.messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    })) || [];
+      if (!targetChatId) {
+        targetChatId = await createChat();
+        if (!targetChatId) return;
+      }
 
-    stopStreamRef.current = sendMessageStream(
-      currentInput,
-      ({ full }) => setTyping(full),
-      async (finalContent) => {
-        await addMessage(targetChatId!, {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: finalContent,
-          time: new Date().toISOString(),
-        });
+      // input 초기화
+      inputRef.current = '';
+      setInput('');
 
-        // [Bug Fix] 제목 생성 시에도 getState()로 최신 chats 참조
-        const latestChats = getState().chats;
-        const latestChat = latestChats.find((c) => c.id === targetChatId);
-        const currentTitle = latestChat?.title || '새로운 채팅';
-        const isDefaultTitle = currentTitle === '새로운 채팅' || currentTitle === '새로운 대화';
-
-        if (targetChatId && isDefaultTitle) {
-          try {
-            const newTitle = await getChatSummary(currentInput);
-            if (newTitle) await updateChatTitle(targetChatId, newTitle);
-          } catch (e) {
-            console.error('제목 생성 실패', e);
-          }
-        }
-
-        setTyping('');
-        setLoading(false);
-        setActiveChatId(null);
-      },
-      history
-    );
-  }, [input, loading, currentChatId, createChat, addMessage, getState, updateChatTitle]);
-
-  // 중단 로직
-  const handleStop = useCallback(async () => {
-    if (stopStreamRef.current && activeChatId) {
-      stopStreamRef.current();
-      stopStreamRef.current = null;
-
-      await addMessage(activeChatId, {
+      await addMessage(targetChatId, {
         id: crypto.randomUUID(),
-        role: 'assistant',
-        content: typing ? `${typing}\n\n> 중단됨` : '> 중단됨',
+        role: 'user',
+        content: textToSend,
         time: new Date().toISOString(),
       });
 
-      setLoading(false);
-      setTyping('');
-      setActiveChatId(null);
-    }
-  }, [typing, addMessage, activeChatId]);
+      const freshChats = getState().chats;
+      const history =
+        freshChats
+          .find((c) => c.id === targetChatId)
+          ?.messages.map(({ role, content }) => ({ role, content })) ?? [];
 
-  // 퀵 센드 (추천 질문 등)
-  const handleQuickSend = useCallback(
-    (text: string) => {
-      if (lastQuickSendText === text) {
-        handleSend();
-        setLastQuickSendText(null);
-      } else {
-        setInput(text);
-        setLastQuickSendText(text);
-      }
+      stopStreamRef.current = sendMessageStream(
+        textToSend,
+        ({ full }) => {
+          if (!getState().isStreaming) setIsStreaming(true);
+          typingRef.current = full;
+          setTyping(full);
+        },
+        async (finalContent) => {
+          setIsStreaming(false);
+          stopStreamRef.current = null;
+          typingRef.current = '';
+
+          await addMessage(targetChatId!, {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: finalContent,
+            time: new Date().toISOString(),
+          });
+
+          const latestChat = getState().chats.find((c) => c.id === targetChatId);
+          const isDefaultTitle =
+            !latestChat?.title ||
+            latestChat.title === '새로운 채팅' ||
+            latestChat.title === '새로운 대화';
+
+          if (isDefaultTitle) {
+            try {
+              const newTitle = await getChatSummary(textToSend);
+              if (newTitle) await updateChatTitle(targetChatId!, newTitle);
+            } catch (e) {
+              console.error('제목 생성 실패', e);
+            }
+          }
+
+          setTyping('');
+        },
+        history
+      );
+      // input, isSending, isStreaming 전부 getState()나 ref로 읽으므로 deps 불필요
     },
-    [lastQuickSendText, handleSend]
+    [createChat, addMessage, getState, updateChatTitle, setIsStreaming]
   );
 
-  return {
-    input,
-    setInput,
-    typing,
-    loading,
-    activeChatId,
-    handleSend,
-    handleStop,
-    handleQuickSend,
-  };
+  const handleStop = useCallback(async () => {
+    if (!stopStreamRef.current) return;
+
+    stopStreamRef.current();
+    stopStreamRef.current = null;
+    setIsStreaming(false); // handleStop에서도 명시적으로 false
+
+    const currentTyping = typingRef.current;
+    const targetChatId = getState().currentChatId;
+
+    if (targetChatId) {
+      await addMessage(targetChatId, {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: currentTyping ? `${currentTyping}\n\n> 중단됨` : '> 중단됨',
+        time: new Date().toISOString(),
+      });
+    }
+
+    typingRef.current = '';
+    setTyping('');
+  }, [addMessage, getState, setIsStreaming]);
+
+  const handleQuickSend = useCallback(
+    (text: string) => {
+      inputRef.current = text;
+      setInput(text);
+      handleSend(text);
+    },
+    [handleSend]
+  );
+
+  // isSending, isStreaming은 UI 표시용으로만 구독
+  const isSending = useChatStore((s) => s.isCreatingChat || s.isSavingMessage);
+  const isStreaming = useChatStore((s) => s.isStreaming);
+
+  return useMemo(
+    () => ({
+      input,
+      setInput: handleSetInput,
+      typing,
+      isSending,
+      isStreaming,
+      handleSend,
+      handleStop,
+      handleQuickSend,
+    }),
+    [input, typing, isSending, isStreaming, handleSend, handleStop, handleQuickSend, handleSetInput]
+  );
 };

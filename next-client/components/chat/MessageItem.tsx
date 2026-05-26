@@ -43,12 +43,12 @@ const MessageItem = memo(
             </div>
           )}
           <div
-            className={`flex flex-col max-w-[calc(100%-5.5rem)] md:max-w-[calc(100%-7rem)] ${
+            className={`flex flex-col min-w-0 max-w-[calc(100%-5.5rem)] md:max-w-[calc(100%-7rem)] ${
               isUser ? 'items-end' : 'items-start'
             }`}
           >
             <div
-              className={`relative px-5 py-3 rounded-2xl text-[14.5px] leading-7 shadow-sm transition-all [will-change:transform] group ${
+              className={`relative px-5 py-3 rounded-2xl text-[14.5px] leading-7 shadow-sm transition-all [will-change:transform] group min-w-0 w-full ${
                 isUser
                   ? 'bg-zinc-900 text-white rounded-tr-none'
                   : 'bg-white text-zinc-800 border border-zinc-100 rounded-tl-none'

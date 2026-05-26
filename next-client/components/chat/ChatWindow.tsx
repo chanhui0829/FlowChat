@@ -13,63 +13,50 @@ import MessageItem from './MessageItem';
 import WelcomeScreen from './WelcomeScreen';
 
 interface ChatWindowProps {
-  typing: string; // AI 응답 스트리밍 텍스트
-  loading: boolean; // 응답 대기 상태 여부
-  activeChatId: string | null; // 현재 응답이 진행 중인 채팅 세션 ID
-  onQuickSend: (text: string) => void; // 웰컴 스크린 질문 제안 핸들러
+  typing: string;
+  isSending: boolean;
+  onQuickSend: (text: string) => void;
 }
-
 /**
  * @description 채팅 메시지 목록 및 실시간 스트리밍 응답을 시각화하는 핵심 컴포넌트
- * [Key Logic & UX]
- * 1. Infinite Scroll & Auto-Scroll: useChatScroll을 통해 새로운 메시지 유입 시 사용자 경험 최적화.
- * 2. Real-time Streaming Render: Streamdown 라이브러리를 활용하여 마크다운 형식을 실시간 렌더링.
- * 3. Conditional Rendering: 대화 내역 유무에 따라 WelcomeScreen과 MessageList를 전환.
  */
-const ChatWindow = memo(function ChatWindow({
-  typing,
-  loading,
-  activeChatId,
-  onQuickSend,
-}: ChatWindowProps) {
-  /* --- 데이터 및 상태 관리 --- */
+
+const ChatWindow = memo(function ChatWindow({ typing, onQuickSend }: ChatWindowProps) {
   const { chats, currentChatId } = useChatStore();
+
+  // isCreatingChat: 새 채팅방 생성 중인지 (AI 응답과 무관)
+  // isStreaming: AI가 실제로 응답 스트리밍 중인지
+
+  const isStreaming = useChatStore((state) => state.isStreaming);
+
   const currentChat = chats.find((c) => c.id === currentChatId);
 
-  // 현재 보고 있는 채팅방이 AI 응답이 생성되고 있는 곳인지 판단
-  const isProcessingHere = currentChatId === activeChatId;
-  // 새로운 대화 시작 여부 판단 (메시지, 로딩, 타이핑 내역이 없을 때)
-  const isNewChat = !currentChat?.messages.length && !typing && !loading;
+  // 새 채팅 생성 중이거나 메시지/typing이 없으면 WelcomeScreen
+  const isNewChat = !currentChat?.messages.length && !typing && !isStreaming;
 
-  // 마지막 메시지 중복 표시 방지 로직 (스트리밍 완료 시점 최적화)
   const lastMessage = currentChat?.messages[currentChat.messages.length - 1];
   const isLastMessageStreaming =
     lastMessage?.role === 'assistant' && lastMessage.content === typing;
 
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
-  /**
-   * [Feature] 클립보드 복사 유틸리티
-   * [Optimization] useCallback으로 메모이제이션하여 불필요한 재생성 방지
-   */
   const copyToClipboard = useCallback((text: string, index: number) => {
     navigator.clipboard.writeText(text);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 1500);
   }, []);
 
-  /**
-   * [Performance] 가상 스크롤을 위한 메시지 목록
-   * @tanstack/react-virtual의 useVirtualizer를 사용하여 대량의 메시지도 효율적으로 렌더링
-   */
   const displayMessages = currentChat?.messages || [];
-  const { handleScroll } = useChatScroll([displayMessages, typing]);
 
   /**
-   * [Virtual Scroll] 가상 스크롤을 위한 전체 아이템 목록
-   * 스트리밍 중인 메시지도 포함하여 가상 스크롤 내에서 위치 계산
+   * 가상 스트리밍 메시지 추가 조건:
+   *   - isStreaming: AI가 실제로 응답 중일 때만
+   *   - isCreatingChat은 제외 — 채팅방 생성은 AI 응답과 무관, 말풍선 불필요
+   *   - isSavingMessage도 제외 — 저장은 백그라운드 작업
    */
-  const virtualItems = isProcessingHere && (loading || typing) && !isLastMessageStreaming
+  const shouldShowStreamingBubble = isStreaming && !isLastMessageStreaming;
+
+  const virtualItems = shouldShowStreamingBubble
     ? [
         ...displayMessages,
         {
@@ -82,28 +69,20 @@ const ChatWindow = memo(function ChatWindow({
       ]
     : displayMessages;
 
-  /**
-   * [Virtual Scroll] 가상 스크롤 훅 사용
-   */
   const { parentRef, getVirtualItems, getTotalSize, measureElement } = useVirtualScroll({
     items: virtualItems,
     estimateSize: 150,
     overscan: 5,
   });
 
+  const { handleScroll } = useChatScroll(parentRef, [displayMessages, typing]);
 
   return (
-    <div
-      className={`flex-1 h-full w-full bg-white relative ${
-        isNewChat ? 'overflow-hidden' : 'overflow-hidden'
-      }`}
-    >
+    <div className="flex-1 h-full w-full bg-white relative overflow-hidden">
       {isNewChat ? (
-        /* 초기 진입 시 웰컴 스크린 가이드 */
         <WelcomeScreen onQuickSend={onQuickSend} />
       ) : (
         <div className="pt-4 h-full flex flex-col relative">
-          {/* [Virtual Scroll] 메시지 히스토리 렌더링 */}
           <div
             ref={parentRef}
             className="overflow-y-auto sidebar-scroll absolute inset-0"
@@ -122,7 +101,6 @@ const ChatWindow = memo(function ChatWindow({
                 const msg = virtualItems[virtualItem.index];
                 if (!msg) return null;
 
-                // 스트리밍 메시지인 경우 별도 렌더링
                 if ('isStreaming' in msg && msg.isStreaming) {
                   return (
                     <div
@@ -142,7 +120,8 @@ const ChatWindow = memo(function ChatWindow({
                           <Logo className="w-5 h-5 animate-pulse" />
                         </div>
                         <div className="w-fit max-w-[85%] md:max-w-[75%] px-6 py-5 rounded-2xl bg-white border border-zinc-100 shadow-xl rounded-tl-none">
-                          {loading && !typing && (
+                          {/* typing이 없을 때만 ... 로딩 점 (첫 청크 수신 대기 중) */}
+                          {!typing && (
                             <div className="flex gap-1.5 items-center h-6">
                               {[0, 1, 2].map((d) => (
                                 <span
@@ -155,7 +134,10 @@ const ChatWindow = memo(function ChatWindow({
                           )}
                           {typing && (
                             <div className="leading-7 text-[14.5px] text-zinc-800">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={markdownComponents}
+                              >
                                 {typing}
                               </ReactMarkdown>
                             </div>
@@ -185,7 +167,10 @@ const ChatWindow = memo(function ChatWindow({
                       isUser={msg.role === 'user'}
                       showDate={
                         !virtualItems[virtualItem.index - 1] ||
-                        !isSameDay((virtualItems[virtualItem.index - 1] as any).time, msg.time)
+                        !isSameDay(
+                          (virtualItems[virtualItem.index - 1] as { time: string }).time,
+                          msg.time
+                        )
                       }
                       onCopy={copyToClipboard}
                       copiedIndex={copiedIndex}

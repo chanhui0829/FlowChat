@@ -6,29 +6,42 @@ const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
+type ChatRole = 'system' | 'user' | 'assistant';
+
+interface HistoryMessage {
+  role: ChatRole;
+  content: string;
+}
+
 /**
- * [Controller] 실시간 채팅 스트리밍 로직
+ * [Controller] 실시간 채팅 스트리밍 (GET → POST 변경)
+ *
+ * 변경 이유:
+ *   - 기존 GET + 쿼리스트링 방식은 history가 길어지면 URL 길이 제한에 걸림
+ *   - POST body로 전달하면 길이 제한 없음, 한글 인코딩 이슈도 없음
+ *   - 클라이언트에서 JSON.parse 없이 배열 그대로 전달하므로 서버에서 파싱 불필요
  */
+
 export const streamChat = async (req: Request, res: Response) => {
-  const prompt = req.query.prompt as string;
-  const historyQuery = req.query.history as string | undefined;
+  const { prompt, history } = req.body as {
+    prompt: string;
+    history?: HistoryMessage[];
+  };
+
+  // 기본값 처리 및 유효성 검사
+  const safeHistory: HistoryMessage[] = Array.isArray(history) ? history : [];
+
+  if (!prompt || typeof prompt !== 'string') {
+    res.status(400).json({ error: 'prompt가 필요합니다.' });
+    return;
+  }
 
   try {
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    // 대화 기록 파싱
-    let history: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [];
-    if (historyQuery) {
-      try {
-        history = JSON.parse(historyQuery);
-      } catch (e) {
-        console.error('History parsing error:', e);
-      }
-    }
-
-    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+    const messages: Array<{ role: ChatRole; content: string }> = [
       {
         role: 'system',
         content: `너는 사용자의 질문에 명확하고 유용한 답변을 제공하는 전문 AI 어시스턴트이다.
@@ -38,7 +51,7 @@ export const streamChat = async (req: Request, res: Response) => {
 - 답변은 간결하면서도 충분한 정보를 제공해라.
 - 확실하지 않은 정보는 추측하지 말고 모른다고 인정해라.`,
       },
-      ...history,
+      ...safeHistory,
       { role: 'user', content: prompt },
     ];
 
@@ -53,19 +66,31 @@ export const streamChat = async (req: Request, res: Response) => {
       const content = chunk.choices[0]?.delta?.content || '';
       if (content) res.write(`data: ${JSON.stringify({ content })}\n\n`);
     }
+
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (error) {
     console.error('Streaming error:', error);
-    res.status(500).end();
+    // 헤더가 이미 전송된 경우 res.status() 호출 불가
+    if (!res.headersSent) {
+      res.status(500).end();
+    } else {
+      res.end();
+    }
   }
 };
 
 /**
- * [Controller] 채팅 제목 요약 로직
+ * [Controller] 채팅 제목 요약
  */
 export const summarizeTitle = async (req: Request, res: Response) => {
   const { prompt } = req.body;
+
+  if (!prompt) {
+    res.status(400).json({ error: 'prompt가 필요합니다.' });
+    return;
+  }
+
   try {
     const response = await openai.chat.completions.create({
       model: 'openrouter/free',
@@ -83,9 +108,11 @@ export const summarizeTitle = async (req: Request, res: Response) => {
       ],
       temperature: 0.3,
     });
+
     const title = response.choices?.[0]?.message?.content?.trim() || '새로운 대화';
     res.json({ title });
-  } catch (error: any) {
+  } catch (error) {
+    console.error('[Summary Error]:', error);
     res.status(500).json({ error: '요약 실패' });
   }
 };

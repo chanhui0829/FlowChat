@@ -4,64 +4,53 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useChatStore } from '@/lib/store';
 
-/**
- * @description ChatList 컴포넌트의 비즈니스 로직을 관리하는 커스텀 훅
- * @param setSidebarOpen 사이드바 열림/닫힘 상태 제어 함수 (반응형 UX 대응용)
- * [Technical Point]
- * 1. Logic Separation: UI와 로직을 분리하여 컴포넌트 비대화를 방지하고 가독성을 확보함.
- * 2. Optimized Handlers: useCallback을 통해 핸들러 함수 재생성을 방지하여 자식 컴포넌트(ChatItem)의 불필요한 리렌더링 최적화.
- * 3. Responsive UX: 모바일 환경에서 항목 선택 시 사이드바를 자동으로 닫아주는 사용자 경험(UX) 로직 내장.
- */
 export const useChatListLogic = (setSidebarOpen: (v: boolean) => void) => {
   const router = useRouter();
   const { chats, currentChatId, createChat, setCurrentChat, updateChatTitle } = useChatStore();
 
-  /* --- UI 관련 로컬 상태 --- */
+  // isStreaming만 구독 — isSending은 메시지 저장 중에도 true가 되어 범위가 너무 넓음
+  // 채팅방 전환/생성은 "AI가 응답 중일 때"만 막는 게 UX상 적절
+  const isStreaming = useChatStore((state) => state.isStreaming);
+
   const [search, setSearch] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
-  /* --- DOM 참조 (외부 클릭 감지용) --- */
   const menuRef = useRef<HTMLDivElement | null>(null);
   const editRef = useRef<HTMLDivElement | null>(null);
 
-  /**
-   * [Search Optimization]: 실시간 검색 필터링 (메모이제이션 적용)
-   */
   const filteredChats = useMemo(() => {
     const keyword = search.toLowerCase();
     return chats.filter((chat) => chat.title.toLowerCase().includes(keyword));
   }, [chats, search]);
 
-  /**
-   * [UX Handler]: 채팅방 선택 시 이동 및 사이드바 제어
-   */
   const handleChatSelect = useCallback(
     (id: string) => {
+      // 스트리밍 중 채팅방 전환 차단
+      // 이유: 응답이 완료되기 전에 채팅방을 바꾸면 finalContent가 엉뚱한 곳에 저장될 수 있음
+      if (isStreaming) return;
+
       setCurrentChat(id);
       router.push(`/chat/${id}`);
-      // [UX] 데스크탑은 CSS(md:relative)에 의해 고정되지만, 모바일에서는 사이드바를 닫아 대화창에 집중하게 함.
       setSidebarOpen(false);
     },
-    [router, setCurrentChat, setSidebarOpen]
+    [router, setCurrentChat, setSidebarOpen, isStreaming]
   );
 
-  /**
-   * [UX Handler]: 신규 채팅 생성
-   */
   const handleCreateChat = useCallback(async () => {
+    // 스트리밍 중 새 채팅 생성 차단 (같은 이유)
+    if (isStreaming) return;
+
     const newId = await createChat();
     if (newId) {
       router.push(`/chat/${newId}`);
       setSidebarOpen(false);
     }
-  }, [createChat, router, setSidebarOpen]);
+  }, [createChat, router, setSidebarOpen, isStreaming]);
 
-  /**
-   * [Business Logic]: 채팅 제목 업데이트
-   */
   const handleSaveEdit = useCallback(async () => {
+    // 제목 편집은 스트리밍 중에도 허용 — 현재 응답과 무관한 작업
     if (!editingId || !editValue.trim()) {
       setEditingId(null);
       return;
@@ -74,15 +63,10 @@ export const useChatListLogic = (setSidebarOpen: (v: boolean) => void) => {
     }
   }, [editingId, editValue, updateChatTitle]);
 
-  /**
-   * [Interaction]: 외부 영역 클릭 시 메뉴 닫기 및 편집 완료 처리
-   */
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
-      // 컨텍스트 메뉴 외부 클릭 시 닫기
       if (menuRef.current && !menuRef.current.contains(target)) setMenuOpenId(null);
-      // 편집 모드 중 외부 클릭 시 자동 저장
       if (editRef.current && !editRef.current.contains(target)) {
         if (editingId) handleSaveEdit();
       }
@@ -92,7 +76,7 @@ export const useChatListLogic = (setSidebarOpen: (v: boolean) => void) => {
   }, [editingId, handleSaveEdit]);
 
   return {
-    state: { search, menuOpenId, editingId, editValue, filteredChats, currentChatId },
+    state: { search, menuOpenId, editingId, editValue, filteredChats, currentChatId, isStreaming },
     actions: {
       setSearch,
       setMenuOpenId,
