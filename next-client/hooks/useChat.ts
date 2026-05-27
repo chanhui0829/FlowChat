@@ -5,7 +5,14 @@ import { useChatStore } from '../lib/store';
 import { sendMessageStream, getChatSummary } from '../lib/api/chatApi';
 
 export const useChat = () => {
-  const { addMessage, createChat, updateChatTitle, setIsStreaming } = useChatStore();
+  const {
+    addMessage,
+    createChat,
+    updateChatTitle,
+    setIsStreaming,
+    setIsAwaitingResponse,
+    setHasReceivedFirstChunk,
+  } = useChatStore();
 
   const getState = useChatStore.getState;
 
@@ -30,20 +37,22 @@ export const useChat = () => {
 
       if (!textToSend.trim() || isSending || isStreaming) return;
 
+      setIsAwaitingResponse(true);
+      setHasReceivedFirstChunk(false);
+
       let targetChatId = getState().currentChatId;
 
       if (!targetChatId) {
         targetChatId = await createChat();
-        if (!targetChatId) return;
+        if (!targetChatId) {
+          setIsAwaitingResponse(false);
+          return;
+        }
       }
 
       inputRef.current = '';
       setInput('');
 
-      // [Fix 1] addMessage 전에 history 구성
-      // addMessage는 Supabase 저장 + store 업데이트를 하는 비동기 함수이므로
-      // await 이후 getState()가 최신 상태를 보장하지 않을 수 있음.
-      // → addMessage 호출 전, 현재 메시지를 포함한 history를 미리 구성한다.
       const prevMessages = getState().chats.find((c) => c.id === targetChatId)?.messages ?? [];
       const history = [...prevMessages, { role: 'user' as const, content: textToSend }].map(
         ({ role, content }) => ({ role, content })
@@ -59,12 +68,22 @@ export const useChat = () => {
       stopStreamRef.current = sendMessageStream(
         textToSend,
         ({ full }) => {
-          if (!getState().isStreaming) setIsStreaming(true);
+          const state = getState();
+
+          if (!state.isStreaming) setIsStreaming(true);
+
+          if (!state.hasReceivedFirstChunk) {
+            setHasReceivedFirstChunk(true);
+          }
+
           typingRef.current = full;
           setTyping(full);
         },
         async (finalContent) => {
           setIsStreaming(false);
+          setIsAwaitingResponse(false);
+          setHasReceivedFirstChunk(false);
+
           stopStreamRef.current = null;
           typingRef.current = '';
 
@@ -92,10 +111,18 @@ export const useChat = () => {
 
           setTyping('');
         },
-        history // [Fix 1] addMessage 전에 구성한 history 사용
+        history
       );
     },
-    [createChat, addMessage, getState, updateChatTitle, setIsStreaming]
+    [
+      createChat,
+      addMessage,
+      getState,
+      updateChatTitle,
+      setIsStreaming,
+      setIsAwaitingResponse,
+      setHasReceivedFirstChunk,
+    ]
   );
 
   const handleStop = useCallback(async () => {
@@ -103,7 +130,10 @@ export const useChat = () => {
 
     stopStreamRef.current();
     stopStreamRef.current = null;
+
     setIsStreaming(false);
+    setIsAwaitingResponse(false);
+    setHasReceivedFirstChunk(false);
 
     const currentTyping = typingRef.current;
     const targetChatId = getState().currentChatId;
@@ -119,7 +149,7 @@ export const useChat = () => {
 
     typingRef.current = '';
     setTyping('');
-  }, [addMessage, getState, setIsStreaming]);
+  }, [addMessage, getState, setIsStreaming, setIsAwaitingResponse, setHasReceivedFirstChunk]);
 
   const handleQuickSend = useCallback(
     (text: string) => {

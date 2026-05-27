@@ -24,19 +24,12 @@ interface ChatWindowProps {
 const ChatWindow = memo(function ChatWindow({ typing, onQuickSend }: ChatWindowProps) {
   const { chats, currentChatId } = useChatStore();
 
-  // isCreatingChat: 새 채팅방 생성 중인지 (AI 응답과 무관)
-  // isStreaming: AI가 실제로 응답 스트리밍 중인지
-
   const isStreaming = useChatStore((state) => state.isStreaming);
+  const isAwaitingResponse = useChatStore((state) => state.isAwaitingResponse);
+  const hasReceivedFirstChunk = useChatStore((state) => state.hasReceivedFirstChunk);
 
   const currentChat = chats.find((c) => c.id === currentChatId);
-
-  // 새 채팅 생성 중이거나 메시지/typing이 없으면 WelcomeScreen
   const isNewChat = !currentChat?.messages.length && !typing && !isStreaming;
-
-  const lastMessage = currentChat?.messages[currentChat.messages.length - 1];
-  const isLastMessageStreaming =
-    lastMessage?.role === 'assistant' && lastMessage.content === typing;
 
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
@@ -48,13 +41,7 @@ const ChatWindow = memo(function ChatWindow({ typing, onQuickSend }: ChatWindowP
 
   const displayMessages = currentChat?.messages || [];
 
-  /**
-   * 가상 스트리밍 메시지 추가 조건:
-   *   - isStreaming: AI가 실제로 응답 중일 때만
-   *   - isCreatingChat은 제외 — 채팅방 생성은 AI 응답과 무관, 말풍선 불필요
-   *   - isSavingMessage도 제외 — 저장은 백그라운드 작업
-   */
-  const shouldShowStreamingBubble = isStreaming && !isLastMessageStreaming;
+  const shouldShowStreamingBubble = isAwaitingResponse;
 
   const virtualItems = shouldShowStreamingBubble
     ? [
@@ -121,7 +108,7 @@ const ChatWindow = memo(function ChatWindow({ typing, onQuickSend }: ChatWindowP
                         </div>
                         <div className="w-fit max-w-[85%] md:max-w-[75%] px-6 py-5 rounded-2xl bg-white border border-zinc-100 shadow-xl rounded-tl-none">
                           {/* typing이 없을 때만 ... 로딩 점 (첫 청크 수신 대기 중) */}
-                          {!typing && (
+                          {!hasReceivedFirstChunk && (
                             <div className="flex gap-1.5 items-center h-6">
                               {[0, 1, 2].map((d) => (
                                 <span

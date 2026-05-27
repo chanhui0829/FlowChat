@@ -7,10 +7,10 @@ import { useChatStore } from '@/lib/store';
 export const useChatListLogic = (setSidebarOpen: (v: boolean) => void) => {
   const router = useRouter();
   const { chats, currentChatId, createChat, setCurrentChat, updateChatTitle } = useChatStore();
+  const isAwaitingResponse = useChatStore((state) => state.isAwaitingResponse);
 
   // isStreaming만 구독 — isSending은 메시지 저장 중에도 true가 되어 범위가 너무 넓음
   // 채팅방 전환/생성은 "AI가 응답 중일 때"만 막는 게 UX상 적절
-  const isStreaming = useChatStore((state) => state.isStreaming);
 
   const [search, setSearch] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
@@ -29,25 +29,25 @@ export const useChatListLogic = (setSidebarOpen: (v: boolean) => void) => {
     (id: string) => {
       // 스트리밍 중 채팅방 전환 차단
       // 이유: 응답이 완료되기 전에 채팅방을 바꾸면 finalContent가 엉뚱한 곳에 저장될 수 있음
-      if (isStreaming) return;
+      if (isAwaitingResponse) return;
 
       setCurrentChat(id);
       router.push(`/chat/${id}`);
       setSidebarOpen(false);
     },
-    [router, setCurrentChat, setSidebarOpen, isStreaming]
+    [router, setCurrentChat, setSidebarOpen, isAwaitingResponse]
   );
 
   const handleCreateChat = useCallback(async () => {
     // 스트리밍 중 새 채팅 생성 차단 (같은 이유)
-    if (isStreaming) return;
+    if (isAwaitingResponse) return;
 
     const newId = await createChat();
     if (newId) {
       router.push(`/chat/${newId}`);
       setSidebarOpen(false);
     }
-  }, [createChat, router, setSidebarOpen, isStreaming]);
+  }, [createChat, router, setSidebarOpen, isAwaitingResponse]);
 
   const handleSaveEdit = useCallback(async () => {
     // 제목 편집은 스트리밍 중에도 허용 — 현재 응답과 무관한 작업
@@ -76,7 +76,15 @@ export const useChatListLogic = (setSidebarOpen: (v: boolean) => void) => {
   }, [editingId, handleSaveEdit]);
 
   return {
-    state: { search, menuOpenId, editingId, editValue, filteredChats, currentChatId, isStreaming },
+    state: {
+      search,
+      menuOpenId,
+      editingId,
+      editValue,
+      filteredChats,
+      currentChatId,
+      isAwaitingResponse,
+    },
     actions: {
       setSearch,
       setMenuOpenId,

@@ -13,6 +13,8 @@ interface ChatState {
   isCreatingChat: boolean;
   isSavingMessage: boolean;
   isStreaming: boolean;
+  isAwaitingResponse: boolean;
+  hasReceivedFirstChunk: boolean;
   error: string | null;
   getIsSending: () => boolean;
 }
@@ -25,6 +27,8 @@ interface ChatActions {
   deleteChat: (id: string) => Promise<void>;
   updateChatTitle: (id: string, newTitle: string) => Promise<void>;
   setIsStreaming: (status: boolean) => void;
+  setIsAwaitingResponse: (status: boolean) => void;
+  setHasReceivedFirstChunk: (status: boolean) => void;
 }
 
 interface ChatSessionResponse {
@@ -48,7 +52,11 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
   isCreatingChat: false,
   isSavingMessage: false,
   isStreaming: false,
+  isAwaitingResponse: false,
+  hasReceivedFirstChunk: false,
   setIsStreaming: (status: boolean) => set({ isStreaming: status }),
+  setIsAwaitingResponse: (status: boolean) => set({ isAwaitingResponse: status }),
+  setHasReceivedFirstChunk: (status: boolean) => set({ hasReceivedFirstChunk: status }),
   getIsSending: () => {
     const state = get();
     return state.isCreatingChat || state.isSavingMessage;

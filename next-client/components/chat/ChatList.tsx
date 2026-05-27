@@ -36,9 +36,10 @@ export default function ChatList({
   const isStreaming = useChatStore((state) => state.isStreaming);
   const isCreatingChat = useChatStore((state) => state.isCreatingChat);
   const isSavingMessage = useChatStore((state) => state.isSavingMessage);
+  const isAwaitingResponse = useChatStore((state) => state.isAwaitingResponse);
 
   // 채팅 전환 비활성화 조건
-  const isDisabled = isStreaming || isCreatingChat || isSavingMessage;
+  const isDisabled = isAwaitingResponse || isCreatingChat || isSavingMessage;
 
   // isStreaming이 true일 때 New Conversation과 채팅 선택을 비활성화
 
