@@ -67,7 +67,9 @@ const ChatWindow = memo(function ChatWindow({ typing, onQuickSend }: ChatWindowP
   return (
     <div className="flex-1 h-full w-full bg-white relative overflow-hidden">
       {isNewChat ? (
-        <WelcomeScreen onQuickSend={onQuickSend} />
+        <div className="h-full flex flex-col items-center justify-center px-4 animate-in fade-in duration-700">
+          <WelcomeScreen onQuickSend={onQuickSend} />
+        </div>
       ) : (
         <div className="pt-4 h-full flex flex-col relative">
           <div

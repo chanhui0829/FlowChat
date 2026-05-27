@@ -23,7 +23,7 @@ const WelcomeScreen = memo(({ onQuickSend }: WelcomeScreenProps) => {
   );
 
   return (
-    <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center animate-in fade-in duration-700 px-4">
+    <div className="flex flex-col w-full h-full items-center justify-center animate-in fade-in duration-700 px-4">
       <div className="flex flex-col items-center max-w-lg w-full text-center">
         <div className="flex flex-row md:flex-col items-center justify-center gap-4 md:gap-0 mb-6 md:mb-10 w-full">
           <div className="w-14 h-14 md:w-24 md:h-24 bg-zinc-100 rounded-2xl md:rounded-[2.5rem] flex items-center justify-center shadow-sm shrink-0 ring-1 ring-zinc-200/50">

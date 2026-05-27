@@ -38,7 +38,7 @@ const MessageItem = memo(
 
         <div className={`flex gap-4 ${isUser ? 'justify-end' : 'justify-start'}`}>
           {!isUser && (
-            <div className="shrink-0 w-10 h-10 flex items-center justify-center rounded-2xl bg-zinc-100 border border-zinc-200 text-zinc-900">
+            <div className="shrink-0 w-10 h-10 flex ml-2 items-center justify-center rounded-2xl bg-zinc-100 border border-zinc-200 text-zinc-900 ">
               <Logo className="w-5 h-5" />
             </div>
           )}
