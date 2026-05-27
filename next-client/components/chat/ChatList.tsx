@@ -33,15 +33,12 @@ export default function ChatList({
   const router = useRouter();
   const { state, actions, refs } = useChatListLogic(setSidebarOpen);
   const { isLoadingChats, error } = useChatStore();
-  const isStreaming = useChatStore((state) => state.isStreaming);
   const isCreatingChat = useChatStore((state) => state.isCreatingChat);
   const isSavingMessage = useChatStore((state) => state.isSavingMessage);
   const isAwaitingResponse = useChatStore((state) => state.isAwaitingResponse);
 
   // 채팅 전환 비활성화 조건
   const isDisabled = isAwaitingResponse || isCreatingChat || isSavingMessage;
-
-  // isStreaming이 true일 때 New Conversation과 채팅 선택을 비활성화
 
   return (
     <aside
@@ -60,7 +57,7 @@ export default function ChatList({
             className={`
               group w-full py-3.5 flex items-center justify-center gap-2.5 rounded-2xl font-semibold shadow-lg transition-all active:scale-[0.96]
               ${
-                isStreaming
+                isDisabled
                   ? 'bg-zinc-300 text-zinc-500 cursor-not-allowed shadow-none'
                   : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-50'
               }
