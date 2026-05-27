@@ -9,9 +9,9 @@ import type { Chat, Message, DBChatMessage } from './types/chat';
 interface ChatState {
   chats: Chat[];
   currentChatId: string | null;
-  isLoadingChats: boolean; // 채팅 목록 로딩
-  isCreatingChat: boolean; // 채팅방 생성 중
-  isSavingMessage: boolean; // 메시지 저장 중
+  isLoadingChats: boolean;
+  isCreatingChat: boolean;
+  isSavingMessage: boolean;
   isStreaming: boolean;
   error: string | null;
   getIsSending: () => boolean;
@@ -38,13 +38,13 @@ interface ChatSessionResponse {
  * [Technical Point]
  * 1. Layered Architecture: DB 통신 로직은 Service 레이어로 위임하여 결합도를 낮춤.
  * 2. Data Transformation: DB의 raw 데이터를 UI 친화적인 도메인 모델로 변환하여 관리.
- * 3. Optimistic Updates: 사용자 경험 향상을 위해 서버 응답 전 UI를 선제적으로 업데이트함.
+ * 3. Optimistic Updates + Rollback: 선제적 UI 업데이트 후 서버 실패 시 이전 상태로 복구.
  */
 export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
   /* --- Initial State --- */
   chats: [],
   currentChatId: null,
-  isLoadingChats: false, // 기본값 false
+  isLoadingChats: false,
   isCreatingChat: false,
   isSavingMessage: false,
   isStreaming: false,
@@ -56,9 +56,10 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
   error: null,
 
   /* --- Actions --- */
+
   /**
    * 전체 채팅 세션 로드 및 초기화
-   *  API 응답 데이터를 Service 레이어의 Mapper를 통해 규격화된 타입으로 정제합니다.
+   * API 응답 데이터를 Service 레이어의 Mapper를 통해 규격화된 타입으로 정제합니다.
    */
   loadChats: async () => {
     set({ isLoadingChats: true, error: null });
@@ -69,7 +70,6 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
       const formattedChats: Chat[] = sessions.map((s) => ({
         id: s.id,
         title: s.title || '새로운 채팅',
-        // DB Raw 데이터를 도메인 Message 타입으로 매핑
         messages: chatService.mapMessages(s.chat_messages || []),
       }));
 
@@ -116,15 +116,30 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
 
   /**
    * 메시지 추가 및 영구 저장
-   * [UX Strategy] 낙관적 업데이트를 적용하여 실시간 대화 흐름의 속도감을 확보합니다.
+   *
+   * [Fix 3] Optimistic Update + 실패 시 롤백 구현
+   *
+   * 전략:
+   *   1. 업데이트 전 chats를 snapshot으로 저장
+   *   2. UI를 먼저 낙관적으로 업데이트 (사용자 체감 속도 향상)
+   *   3. Supabase 저장 실패 시 snapshot으로 롤백 + error 상태 세팅
+   *
+   * 이전 코드에는 롤백 로직이 주석으로만 존재했으나,
+   * 실제 네트워크 오류나 Supabase 장애 시 UI와 DB가 불일치하는 문제가 발생할 수 있어 구현함.
    */
   addMessage: async (sessionId: string, msg: Message) => {
     set({ isSavingMessage: true });
-    const { chats } = get();
-    const currentChat = chats.find((c) => c.id === sessionId);
-    if (!currentChat) return;
 
-    // 1. [Optimistic Update] UI 상태를 먼저 업데이트
+    const currentChat = get().chats.find((c) => c.id === sessionId);
+    if (!currentChat) {
+      set({ isSavingMessage: false });
+      return;
+    }
+
+    // 1. 롤백용 snapshot 저장
+    const snapshot = get().chats;
+
+    // 2. [Optimistic Update] UI 상태를 먼저 업데이트
     set((state) => ({
       chats: state.chats.map((c) =>
         c.id === sessionId ? { ...c, messages: [...c.messages, msg] } : c
@@ -132,13 +147,14 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
     }));
 
     try {
-      // 2. 서버 영구 저장 (Service 레이어 활용)
+      // 3. 서버 영구 저장
       await chatService.saveMessage(sessionId, msg);
     } catch (error) {
-      // 실무에서는 여기서 에러 발생 시 UI를 롤백하거나 에러 토스트를 띄우는 로직을 추가합니다.
-      console.error('[Store: addMessage Sync Error]', error);
+      // 4. [Rollback] 실패 시 snapshot으로 UI 복구 + 에러 상태 세팅
+      set({ chats: snapshot, error: '메시지 저장에 실패했습니다.' });
+      console.error('[Store: addMessage Rollback]', error);
     } finally {
-      set({ isSavingMessage: false }); // 로딩 종료
+      set({ isSavingMessage: false });
     }
   },
 

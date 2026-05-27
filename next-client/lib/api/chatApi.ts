@@ -5,6 +5,11 @@ const MCP_URL =
     ? 'http://localhost:4000/mcp'
     : `${process.env.NEXT_PUBLIC_API_URL}/mcp`;
 
+// [Fix 2] 토큰 한도 관리 — 최근 N턴만 API에 전달
+// openrouter/auto 기준 컨텍스트 윈도우를 고려해 20턴으로 제한
+// 대화가 길어질수록 오래된 메시지는 자동으로 슬라이딩 아웃됨
+const MAX_HISTORY_TURNS = 20;
+
 interface ChatResponse {
   result: string;
 }
@@ -37,6 +42,10 @@ export const sendMessage = async (prompt: string): Promise<string> => {
  * TextDecoder { stream: true } 대신 버퍼 누적 방식 사용:
  *   - TypeScript lib 설정에 따라 해당 옵션 타입이 없는 경우가 있음
  *   - 대신 불완전 청크를 leftover 버퍼에 쌓아서 동일하게 처리
+ *
+ * [Fix 2] 슬라이딩 윈도우:
+ *   - 전체 history를 그대로 넘기면 대화가 길어질수록 토큰 한도 초과 에러 발생
+ *   - MAX_HISTORY_TURNS(20)개만 슬라이싱해서 전달
  */
 export const sendMessageStream = (
   prompt: string,
@@ -52,7 +61,10 @@ export const sendMessageStream = (
       const res = await fetch(MCP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, history }),
+        body: JSON.stringify({
+          prompt,
+          history: history.slice(-MAX_HISTORY_TURNS), // [Fix 2] 최근 N턴만 전달
+        }),
         signal: controller.signal,
       });
 
@@ -62,7 +74,6 @@ export const sendMessageStream = (
       }
 
       const reader = res.body.getReader();
-      // TextDecoder를 옵션 없이 생성 후 leftover 버퍼로 멀티바이트 경계 처리
       const decoder = new TextDecoder('utf-8');
       let leftover = '';
 
@@ -71,11 +82,9 @@ export const sendMessageStream = (
 
         if (done) break;
 
-        // 이전 청크에서 잘린 데이터 + 새 데이터를 합쳐서 파싱
         const text = leftover + decoder.decode(value, { stream: false });
         const lines = text.split('\n');
 
-        // 마지막 라인이 '\n'으로 끝나지 않으면 잘린 것 → 다음 청크에 이어붙임
         leftover = lines.pop() ?? '';
 
         for (const line of lines) {
@@ -102,7 +111,6 @@ export const sendMessageStream = (
         }
       }
 
-      // res.body가 [DONE] 없이 닫힌 경우 fallback
       if (fullText) onDone(fullText);
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -111,7 +119,6 @@ export const sendMessageStream = (
     }
   })();
 
-  // 외부에서 스트림 중단 시 호출할 cleanup 함수
   return () => controller.abort();
 };
 

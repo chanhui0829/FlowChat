@@ -1,4 +1,3 @@
-// useChat.ts 전체
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
@@ -13,12 +12,10 @@ export const useChat = () => {
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState('');
 
-  // input을 ref로도 추적 → handleSend deps에서 input 제거 가능
   const inputRef = useRef('');
   const typingRef = useRef('');
   const stopStreamRef = useRef<(() => void) | null>(null);
 
-  // setInput을 감싸서 ref도 동기 업데이트
   const handleSetInput = useCallback((value: string) => {
     inputRef.current = value;
     setInput(value);
@@ -26,7 +23,7 @@ export const useChat = () => {
 
   const handleSend = useCallback(
     async (overrideInput?: string) => {
-      const textToSend = overrideInput ?? inputRef.current; // ref에서 읽음
+      const textToSend = overrideInput ?? inputRef.current;
 
       const { isStreaming, isCreatingChat, isSavingMessage } = getState();
       const isSending = isCreatingChat || isSavingMessage;
@@ -40,9 +37,17 @@ export const useChat = () => {
         if (!targetChatId) return;
       }
 
-      // input 초기화
       inputRef.current = '';
       setInput('');
+
+      // [Fix 1] addMessage 전에 history 구성
+      // addMessage는 Supabase 저장 + store 업데이트를 하는 비동기 함수이므로
+      // await 이후 getState()가 최신 상태를 보장하지 않을 수 있음.
+      // → addMessage 호출 전, 현재 메시지를 포함한 history를 미리 구성한다.
+      const prevMessages = getState().chats.find((c) => c.id === targetChatId)?.messages ?? [];
+      const history = [...prevMessages, { role: 'user' as const, content: textToSend }].map(
+        ({ role, content }) => ({ role, content })
+      );
 
       await addMessage(targetChatId, {
         id: crypto.randomUUID(),
@@ -50,12 +55,6 @@ export const useChat = () => {
         content: textToSend,
         time: new Date().toISOString(),
       });
-
-      const freshChats = getState().chats;
-      const history =
-        freshChats
-          .find((c) => c.id === targetChatId)
-          ?.messages.map(({ role, content }) => ({ role, content })) ?? [];
 
       stopStreamRef.current = sendMessageStream(
         textToSend,
@@ -93,9 +92,8 @@ export const useChat = () => {
 
           setTyping('');
         },
-        history
+        history // [Fix 1] addMessage 전에 구성한 history 사용
       );
-      // input, isSending, isStreaming 전부 getState()나 ref로 읽으므로 deps 불필요
     },
     [createChat, addMessage, getState, updateChatTitle, setIsStreaming]
   );
@@ -105,7 +103,7 @@ export const useChat = () => {
 
     stopStreamRef.current();
     stopStreamRef.current = null;
-    setIsStreaming(false); // handleStop에서도 명시적으로 false
+    setIsStreaming(false);
 
     const currentTyping = typingRef.current;
     const targetChatId = getState().currentChatId;
@@ -132,7 +130,6 @@ export const useChat = () => {
     [handleSend]
   );
 
-  // isSending, isStreaming은 UI 표시용으로만 구독
   const isSending = useChatStore((s) => s.isCreatingChat || s.isSavingMessage);
   const isStreaming = useChatStore((s) => s.isStreaming);
 

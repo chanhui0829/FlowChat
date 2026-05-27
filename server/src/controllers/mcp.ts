@@ -6,6 +6,9 @@ const openai = new OpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
+// 모델명 환경변수화
+const CHAT_MODEL = process.env.OPENROUTER_MODEL ?? 'openrouter/auto';
+
 type ChatRole = 'system' | 'user' | 'assistant';
 
 interface HistoryMessage {
@@ -14,21 +17,14 @@ interface HistoryMessage {
 }
 
 /**
- * [Controller] 실시간 채팅 스트리밍 (GET → POST 변경)
- *
- * 변경 이유:
- *   - 기존 GET + 쿼리스트링 방식은 history가 길어지면 URL 길이 제한에 걸림
- *   - POST body로 전달하면 길이 제한 없음, 한글 인코딩 이슈도 없음
- *   - 클라이언트에서 JSON.parse 없이 배열 그대로 전달하므로 서버에서 파싱 불필요
+ * [Controller] 실시간 채팅 스트리밍
  */
-
 export const streamChat = async (req: Request, res: Response) => {
   const { prompt, history } = req.body as {
     prompt: string;
     history?: HistoryMessage[];
   };
 
-  // 기본값 처리 및 유효성 검사
   const safeHistory: HistoryMessage[] = Array.isArray(history) ? history : [];
 
   if (!prompt || typeof prompt !== 'string') {
@@ -56,7 +52,7 @@ export const streamChat = async (req: Request, res: Response) => {
     ];
 
     const stream = await openai.chat.completions.create({
-      model: 'openrouter/free',
+      model: CHAT_MODEL, // [Fix 5] 환경변수로 분리
       messages,
       stream: true,
       temperature: 0.3,
@@ -71,7 +67,6 @@ export const streamChat = async (req: Request, res: Response) => {
     res.end();
   } catch (error) {
     console.error('Streaming error:', error);
-    // 헤더가 이미 전송된 경우 res.status() 호출 불가
     if (!res.headersSent) {
       res.status(500).end();
     } else {
@@ -93,7 +88,7 @@ export const summarizeTitle = async (req: Request, res: Response) => {
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'openrouter/free',
+      model: CHAT_MODEL, // [Fix 5] 환경변수로 분리
       messages: [
         {
           role: 'system',
