@@ -66,9 +66,7 @@
 ```
 next-client/
 ├── app/                          # Next.js App Router
-│   ├── casestudy/
-│   │   └── page.tsx             # 기술 케이스 스터디 페이지
-│   ├── chat/
+   ├── chat/
 │   │   └── [id]/
 │   │       └── page.tsx         # 동적 라우팅 채팅 페이지
 │   ├── layout.tsx               # 루트 레이아웃
