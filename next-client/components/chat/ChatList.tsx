@@ -8,10 +8,8 @@ import {
   FiEdit2,
   FiSearch,
   FiMessageSquare,
-  FiBookOpen,
   FiAlertCircle,
 } from 'react-icons/fi';
-import { useRouter } from 'next/navigation';
 
 import { useChatListLogic } from '@/hooks/useChatListLogic';
 import { useChatStore } from '@/lib/store';
@@ -30,7 +28,6 @@ export default function ChatList({
   sidebarOpen,
   setSidebarOpen,
 }: ChatListProps) {
-  const router = useRouter();
   const { state, actions, refs } = useChatListLogic(setSidebarOpen);
   const { isLoadingChats, error } = useChatStore();
   const isCreatingChat = useChatStore((state) => state.isCreatingChat);
@@ -129,20 +126,6 @@ export default function ChatList({
               />
             ))
           )}
-        </div>
-
-        {/* 하단 케이스 스터디 버튼 */}
-        <div className="mt-auto pt-6 border-t border-zinc-200/50">
-          <button
-            onClick={() => {
-              router.push('/casestudy');
-              setSidebarOpen(false);
-            }}
-            className="flex items-center gap-3.5 w-full px-4 py-4 rounded-2xl text-zinc-500 hover:bg-zinc-900 hover:text-white hover:shadow-md transition-all duration-300 group"
-          >
-            <FiBookOpen size={18} className="group-hover:rotate-12 transition-transform" />
-            <span className="text-[14px] font-bold tracking-tight">Technical Case Study</span>
-          </button>
         </div>
       </div>
     </aside>
