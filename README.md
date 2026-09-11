@@ -1,6 +1,6 @@
 # 💬 FlowChat
 
-**Next.js 15와 OpenRouter API를 활용한 실시간 스트리밍 AI 채팅 플랫폼**입니다.  
+**Next.js 16과 OpenRouter API를 활용한 실시간 스트리밍 AI 채팅 플랫폼**입니다.  
 단순한 기능 구현을 넘어, **CSR에서 SSR로의 아키텍처 마이그레이션**과 **실시간 데이터 스트리밍 최적화**를 통해 성능과 사용자 경험을 극대화하는 데 집중했습니다.
 
 ---
@@ -8,7 +8,7 @@
 ## 🚀 주요 기능 & 구현 포인트
 
 ### 🔄 아키텍처 마이그레이션 (CSR → SSR)
-* **Next.js 15 App Router 도입:** 기존 React SPA(CSR) 구조에서 Next.js 15 App Router로 마이그레이션하여 SSR(Server-Side Rendering)을 구현했습니다.
+* **Next.js App Router 도입:** 기존 React SPA(CSR) 구조에서 Next.js 15 App Router로 마이그레이션하여 SSR(Server-Side Rendering)을 구현했고, 이후 Next.js 16으로 업그레이드했습니다.
 * **초기 로딩 성능 개선:** 서버 사이드 렌더링으로 첫 페이지 로드 시 즉각적인 콘텐츠 표시를 달성하고 LCP(Largest Contentful Paint) 지표를 개선했습니다.
 * **SEO 최적화:** SSR 구조를 통해 검색 엔진 최적화를 달성하고 메타데이터 관리를 체계화했습니다.
 * **동적 라우팅 params 처리:** Next.js 15의 변경사항인 params Promise 처리를 적용하여 최신 App Router 패턴을 준수했습니다.
@@ -45,7 +45,7 @@
 ## 🧠 기술 스택
 
 ### Frontend
-* **Framework:** Next.js 15 (App Router), React 19
+* **Framework:** Next.js 16 (App Router), React 19
 * **Language:** TypeScript
 * **State Management:** Zustand
 * **Styling:** Tailwind CSS
@@ -66,7 +66,9 @@
 ```
 next-client/
 ├── app/                          # Next.js App Router
-   ├── chat/
+│   ├── casestudy/
+│   │   └── page.tsx             # 기술 케이스 스터디 페이지
+│   ├── chat/
 │   │   └── [id]/
 │   │       └── page.tsx         # 동적 라우팅 채팅 페이지
 │   ├── layout.tsx               # 루트 레이아웃

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useChatStore } from '../lib/store';
 import { sendMessageStream, getChatSummary } from '../lib/api/chatApi';
@@ -84,6 +84,16 @@ export const useChat = () => {
         textToSend,
         ({ full }) => {
           const state = getState();
+          // [Fix] isStreaming/typing은 전역 상태라, 사이드바 가드를 우회해
+          // (뒤로가기·URL 직접 이동 등) 다른 채팅방으로 넘어간 사이에도 이
+          // 콜백은 계속 불린다 — 지금 보고 있는 채팅방이 targetChatId와
+          // 다르면 화면(typing 텍스트·스트리밍 표시)은 갱신하지 않고,
+          // 백그라운드 완료 처리(메시지 저장 등)만 정상 진행한다.
+          const isViewingThisChat = state.currentChatId === targetChatId;
+
+          typingRef.current = full;
+
+          if (!isViewingThisChat) return;
 
           if (!state.isStreaming) setIsStreaming(true);
 
@@ -91,13 +101,17 @@ export const useChat = () => {
             setHasReceivedFirstChunk(true);
           }
 
-          typingRef.current = full;
           setTyping(full);
         },
         async (finalContent) => {
-          setIsStreaming(false);
-          setIsAwaitingResponse(false);
-          setHasReceivedFirstChunk(false);
+          const isViewingThisChat = getState().currentChatId === targetChatId;
+
+          if (isViewingThisChat) {
+            setIsStreaming(false);
+            setIsAwaitingResponse(false);
+            setHasReceivedFirstChunk(false);
+            setTyping('');
+          }
 
           stopStreamRef.current = null;
           typingRef.current = '';
@@ -123,8 +137,6 @@ export const useChat = () => {
               console.error('제목 생성 실패', e);
             }
           }
-
-          setTyping('');
         },
         history
       );
@@ -165,6 +177,19 @@ export const useChat = () => {
     typingRef.current = '';
     setTyping('');
   }, [addMessage, getState, setIsStreaming, setIsAwaitingResponse, setHasReceivedFirstChunk]);
+
+  // [Fix] 언마운트 시 진행 중이던 스트림을 그대로 abort — 이전에는 정지 버튼을
+  // 누를 때만 abort()가 호출되고, 다른 채팅방으로 이동하는 가드를 우회하는
+  // 경로(브라우저 뒤로가기, URL 직접 이동 등)에서는 fetch가 백그라운드에
+  // 남아 전역 스트리밍 상태를 계속 건드릴 수 있었음. 메시지 저장 같은 부수
+  // 효과는 없이 요청만 끊는다 — handleStop과 달리 "중단됨" 메시지는 남기지
+  // 않음(사용자가 명시적으로 멈춘 게 아니라 화면을 떠난 것이므로).
+  useEffect(() => {
+    return () => {
+      stopStreamRef.current?.();
+      stopStreamRef.current = null;
+    };
+  }, []);
 
   const handleQuickSend = useCallback(
     (text: string) => {

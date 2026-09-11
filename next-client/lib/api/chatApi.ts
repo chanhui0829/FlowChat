@@ -39,9 +39,14 @@ export const sendMessage = async (prompt: string): Promise<string> => {
  *   - EventSource는 GET 전용 → history를 URL에 담으면 길이 제한(~2KB)에 걸림
  *   - fetch POST로 body에 담으면 길이 제한 없음
  *
- * TextDecoder { stream: true } 대신 버퍼 누적 방식 사용:
- *   - TypeScript lib 설정에 따라 해당 옵션 타입이 없는 경우가 있음
- *   - 대신 불완전 청크를 leftover 버퍼에 쌓아서 동일하게 처리
+ * TextDecoder는 { stream: true }로 호출해 청크 경계에서 잘린 멀티바이트 문자를
+ * 디코더 내부 상태에 보관하게 한다 — leftover 버퍼는 "완성된 문자열을 줄 단위로
+ * 잘라 붙이는" 역할만 하고, "원시 바이트가 문자 중간에서 잘리는" 문제는 방어하지
+ * 못하므로 반드시 둘 다 필요하다. (과거엔 { stream: false }를 썼는데, 한글처럼
+ * 3바이트로 인코딩되는 문자가 두 번의 read() 사이에서 정확히 잘리면 U+FFFD로
+ * 깨지는 잠재 버그가 있었음 — 재현: 멀티바이트 문자를 바이트 중간에서 나눠
+ * decode(part, {stream:false})를 두 번 호출하면 각각 깨진 문자가 나오지만,
+ * {stream:true}로 호출하면 올바르게 이어붙는다.)
  *
  * [Fix 2] 슬라이딩 윈도우:
  *   - 전체 history를 그대로 넘기면 대화가 길어질수록 토큰 한도 초과 에러 발생
@@ -80,9 +85,34 @@ export const sendMessageStream = (
       while (true) {
         const { done, value } = await reader.read();
 
-        if (done) break;
+        if (done) {
+          // 스트림 종료 — 디코더 내부에 남아있을 수 있는 바이트를 마저 flush
+          const tail = leftover + decoder.decode();
+          if (tail.trim().length > 0) {
+            for (const line of tail.split('\n')) {
+              const trimmed = line.trim();
+              if (trimmed.startsWith('data:')) {
+                const raw = trimmed.slice(5).trim();
+                if (raw && raw !== '[DONE]') {
+                  try {
+                    const parsed: StreamChunk = JSON.parse(raw);
+                    if (parsed.content) {
+                      fullText += parsed.content;
+                      onChunk({ chunk: parsed.content, full: fullText });
+                    }
+                  } catch {
+                    // 비정형 청크는 무시
+                  }
+                }
+              }
+            }
+          }
+          break;
+        }
 
-        const text = leftover + decoder.decode(value, { stream: false });
+        // { stream: true }: 청크 경계에서 잘린 멀티바이트 문자를 디코더가
+        // 내부적으로 들고 있다가 다음 read()의 바이트와 이어붙여 처리한다.
+        const text = leftover + decoder.decode(value, { stream: true });
         const lines = text.split('\n');
 
         leftover = lines.pop() ?? '';

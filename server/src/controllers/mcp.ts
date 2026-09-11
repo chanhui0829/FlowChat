@@ -16,6 +16,31 @@ interface HistoryMessage {
   content: string;
 }
 
+// [Fix] 클라이언트(chatApi.ts)는 history를 MAX_HISTORY_TURNS(20)로 슬라이싱해서 보내지만,
+// 그건 클라이언트 쪽 제약일 뿐 서버는 받은 history를 검증 없이 그대로 메시지에 스프레드하고
+// 있었음 — 프록시를 거치지 않고 이 엔드포인트를 직접 호출하면 history를 무제한으로 채워
+// 토큰을 과다 소모시킬 수 있는 과금 리스크가 있었음. 서버 쪽에도 동일한 상한을 둔다.
+const MAX_HISTORY_MESSAGES = 40; // 대략 20턴(사용자+어시스턴트) 분량
+const MAX_MESSAGE_LENGTH = 8000; // 메시지 1개당 최대 문자 수
+const MAX_PROMPT_LENGTH = 4000;
+
+const sanitizeHistory = (history: unknown): HistoryMessage[] => {
+  if (!Array.isArray(history)) return [];
+
+  const valid = history.filter(
+    (m): m is HistoryMessage =>
+      !!m &&
+      typeof m === 'object' &&
+      (m.role === 'system' || m.role === 'user' || m.role === 'assistant') &&
+      typeof m.content === 'string'
+  );
+
+  return valid.slice(-MAX_HISTORY_MESSAGES).map((m) => ({
+    role: m.role,
+    content: m.content.length > MAX_MESSAGE_LENGTH ? m.content.slice(0, MAX_MESSAGE_LENGTH) : m.content,
+  }));
+};
+
 /**
  * [Controller] 실시간 채팅 스트리밍
  */
@@ -25,12 +50,17 @@ export const streamChat = async (req: Request, res: Response) => {
     history?: HistoryMessage[];
   };
 
-  const safeHistory: HistoryMessage[] = Array.isArray(history) ? history : [];
-
   if (!prompt || typeof prompt !== 'string') {
     res.status(400).json({ error: 'prompt가 필요합니다.' });
     return;
   }
+
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    res.status(400).json({ error: `prompt는 ${MAX_PROMPT_LENGTH}자를 넘을 수 없습니다.` });
+    return;
+  }
+
+  const safeHistory: HistoryMessage[] = sanitizeHistory(history);
 
   try {
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
