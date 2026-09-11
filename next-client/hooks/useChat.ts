@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useChatStore } from '../lib/store';
 import { sendMessageStream, getChatSummary } from '../lib/api/chatApi';
@@ -212,18 +212,38 @@ export const useChat = () => {
     setTyping('');
   }, [addMessage, getState, setIsStreaming, setIsAwaitingResponse, setHasReceivedFirstChunk]);
 
-  // [Fix] 언마운트 시 진행 중이던 스트림을 그대로 abort — 이전에는 정지 버튼을
-  // 누를 때만 abort()가 호출되고, 다른 채팅방으로 이동하는 가드를 우회하는
-  // 경로(브라우저 뒤로가기, URL 직접 이동 등)에서는 fetch가 백그라운드에
-  // 남아 전역 스트리밍 상태를 계속 건드릴 수 있었음. 메시지 저장 같은 부수
-  // 효과는 없이 요청만 끊는다 — handleStop과 달리 "중단됨" 메시지는 남기지
-  // 않음(사용자가 명시적으로 멈춘 게 아니라 화면을 떠난 것이므로).
-  useEffect(() => {
-    return () => {
-      stopStreamRef.current?.();
-      stopStreamRef.current = null;
-    };
-  }, []);
+  // [Fix] "채팅이 아예 안 먹는다" 버그의 진짜 근본 원인이 바로 이 이펙트였다.
+  //
+  // ChatLayout은 '/' <-> '/chat/[id]' 로 이동할 때마다 완전히 재마운트되는
+  // 컴포넌트다 (authStore.ts, ChatLayout.tsx에도 각각 "ChatLayout은 '/' <->
+  // '/chat/[id]' 이동마다 재마운트되므로..." 라는 동일한 사실을 전제로 한 별도
+  // 수정이 이미 존재함 — 이 하나의 사실이 이미 두 군데 버그의 원인이었던 것).
+  //
+  // 문제는 새 채팅의 "첫 메시지"를 보내는 흐름 자체가 정확히 이 재마운트를
+  // 유발한다는 것: handleSend → sendMessageStream()으로 스트림을 시작 →
+  // (아직 fetch 응답 전) router.replace(`/chat/${targetChatId}`) 호출 → '/'
+  // 페이지 템플릿(app/page.tsx)이 언마운트되고 '/chat/[id]' 페이지 템플릿
+  // (app/chat/[id]/page.tsx)이 새로 마운트됨 → 이 시점에 "언마운트된" (구)
+  // ChatLayout 인스턴스의 useChat() 훅도 함께 언마운트되며 바로 이 이펙트의
+  // cleanup이 실행됨 → stopStreamRef.current()가 호출되어 **자기 자신이 방금
+  // 막 시작한 스트림을 스스로 abort시켜버림**. 실제 배포 환경에서 fetch가
+  // (Render 콜드스타트 등으로) 라우팅 전환보다 조금이라도 느리면 100% 재현되고,
+  // 로컬처럼 응답이 아주 빠를 때만 우연히 abort보다 먼저 끝나 정상 동작처럼
+  // 보였다 — "가끔은 되고 가끔은 안 된다"는 증상과 정확히 일치한다.
+  // AbortError는 chatApi.ts에서 의도적으로 onError를 호출하지 않으므로(사용자가
+  // 직접 정지한 게 아니라는 전제), 이 자기-abort가 발생하면 onDone도 onError도
+  // 전혀 호출되지 않아 로딩 락이 영원히 풀리지 않는 채로 끝난다.
+  //
+  // 이 이펙트가 원래 막으려던 문제(뒤로가기·URL 직접 이동 등으로 진짜 화면을
+  // 떠났을 때 백그라운드 fetch가 전역 상태를 계속 오염시키는 것)는 이제 다른
+  // 방식으로 이미 안전하게 처리되고 있다: onChunk는 isViewingThisChat으로 화면
+  // 갱신을 가드하고, onDone/onError는 어느 채팅을 보고 있든 항상 락만 정확히
+  // 해제하며, addMessage는 targetChatId로 정확한 채팅에만 저장된다. 즉 스트림이
+  // 백그라운드에서 계속 진행돼도 더 이상 다른 화면을 오염시키지 않으므로,
+  // "언마운트되면 무조건 끊는다"는 이 방어 로직 자체가 필요 없어졌고, 오히려
+  // 가장 흔한 사용 흐름(새 채팅 시작)을 구조적으로 깨뜨리는 쪽이 더 컸다.
+  // 그래서 자동 abort는 완전히 제거하고, 스트림 중단은 사용자가 명시적으로
+  // "정지" 버튼을 눌렀을 때(handleStop)만 일어나도록 한다.
 
   const handleQuickSend = useCallback(
     (text: string) => {
