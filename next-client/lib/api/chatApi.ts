@@ -149,7 +149,24 @@ export const sendMessageStream = (
         }
       }
 
-      if (fullText) onDone(fullText);
+      // [Fix] 서버가 200으로 스트림을 시작해놓고 '[DONE]' 센티널도, 콘텐츠도
+      // 하나도 못 보낸 채 연결만 끊기는 경우가 실제로 있었다(예: server/mcp.ts의
+      // streamChat이 res.setHeader(...)까지 실행해 헤더를 이미 보낸 뒤, 그 다음
+      // OpenRouter 호출(openai.chat.completions.create)이 던지면 catch 블록이
+      // `res.headersSent`이므로 별도 에러 응답 없이 그냥 res.end()만 함 — 클라이언트
+      // 입장에서는 reader.read()가 아무 데이터 없이 done:true로 끝남).
+      // 이전 코드는 `if (fullText) onDone(fullText)`였는데, 이 경우 fullText가
+      // 빈 문자열이라 onDone도 onError도 전혀 호출되지 않았음 — 위의 res.ok/catch
+      // 수정으로도 못 잡히는 세 번째 경로였고, 결과적으로 로딩 락이 똑같이 영원히
+      // 풀리지 않는 버그가 재현됐다(주입 테스트로 확인). 스트림이 자연 종료됐다면
+      // 콘텐츠가 있든 없든 반드시 무언가는 호출되게 해서 호출부가 항상 락을
+      // 해제할 수 있게 한다 — 내용이 있으면 onDone, 완전히 비어있으면(=서버가
+      // 사실상 실패한 것) onError로 처리한다.
+      if (fullText) {
+        onDone(fullText);
+      } else {
+        onError(new Error('스트림이 콘텐츠 없이 종료되었습니다.'));
+      }
     } catch (err) {
       // AbortError는 사용자가 직접 중지(handleStop)했거나 컴포넌트 언마운트로
       // 의도적으로 취소한 경우라 handleStop 쪽에서 이미 상태를 정리하므로 제외.
