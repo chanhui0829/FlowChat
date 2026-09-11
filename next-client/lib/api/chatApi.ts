@@ -10,6 +10,22 @@ const MCP_URL =
 // 대화가 길어질수록 오래된 메시지는 자동으로 슬라이딩 아웃됨
 const MAX_HISTORY_TURNS = 20;
 
+// [Fix 3] 서버가 응답 없이 매달려도 클라이언트가 스스로 포기하지 못하던 "무한 로딩" 버그.
+// 실제 운영 로그에서 확인된 원인: OPENROUTER_MODEL로 지정한 무료 모델(예: nemotron-3.5
+// -lightning:free)의 실제 제공자 쪽이 응답을 만들다 멈춰버리면, OpenRouter가 결국
+// "Upstream idle timeout exceeded"로 끊는다. 이때 서버(mcp.ts)가 이미 res.write를 한
+// 번이라도 호출해 headersSent가 true인 상태로 이 에러를 만나면, catch 블록은 그냥
+// res.end()만 하고 끝난다 — [DONE] 센티널도 없이 연결만 닫힌다. 문제는 이런 경로들
+// 전부와 별개로, 애초에 네트워크 자체가 응답을 전혀 안 주고 소켓만 열어둔 채 멈추는
+// 경우(콜드스타트 도중 중간 프록시가 응답을 그냥 계속 기다리기만 하는 경우 등)에는
+// reader.read()가 영원히 resolve되지 않는다 — fetch/ReadableStream에는 자체 타임아웃이
+// 없기 때문이다. 그 결과 onDone도 onError도 전혀 호출되지 않고, "..." 로딩만 화면에
+// 무한정 남는다. 진행(응답 시작 또는 각 청크 수신)이 일정 시간 동안 전혀 없으면
+// 클라이언트가 스스로 포기하고 onError로 안내하도록 타이머를 둔다. Render 무료
+// 인스턴스의 콜드스타트가 "50초 이상 걸릴 수 있다"고 공식적으로 안내되므로, 그보다
+// 넉넉한 90초로 잡아 정상적인 콜드스타트를 타임아웃으로 오인하지 않게 한다.
+const STREAM_TIMEOUT_MS = 90000;
+
 interface ChatResponse {
   result: string;
 }
@@ -68,6 +84,30 @@ export const sendMessageStream = (
   const controller = new AbortController();
   let fullText = '';
 
+  // [Fix 3] 진행(첫 응답 또는 각 청크)이 STREAM_TIMEOUT_MS 동안 전혀 없으면 스스로
+  // abort한다. 이 abort는 사용자가 "정지"를 누른 것과 신호(controller.abort())상으로는
+  // 구분이 안 되므로, catch 블록에서 AbortError를 다르게 처리할 수 있도록 별도
+  // 플래그로 "타임아웃이 원인이었는지"를 기록해둔다.
+  let timedOut = false;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const resetStreamTimeout = () => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, STREAM_TIMEOUT_MS);
+  };
+
+  const clearStreamTimeout = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+  };
+
+  resetStreamTimeout();
+
   (async () => {
     try {
       const res = await fetch(MCP_URL, {
@@ -80,7 +120,12 @@ export const sendMessageStream = (
         signal: controller.signal,
       });
 
+      // 헤더 응답을 받았다는 건 서버가 최소한 살아있다는 뜻 — 다음 read()까지 다시
+      // 타이머를 건다 (콜드스타트로 여기까지 오는 데 이미 오래 걸렸을 수 있으므로).
+      resetStreamTimeout();
+
       if (!res.ok || !res.body) {
+        clearStreamTimeout();
         console.error('[SSE] 응답 오류:', res.status);
         onError(new Error(`SSE response error: ${res.status}`));
         return;
@@ -92,6 +137,7 @@ export const sendMessageStream = (
 
       while (true) {
         const { done, value } = await reader.read();
+        resetStreamTimeout(); // 데이터든 종료든 진행이 있었으니 타이머 리셋
 
         if (done) {
           // 스트림 종료 — 디코더 내부에 남아있을 수 있는 바이트를 마저 flush
@@ -132,6 +178,7 @@ export const sendMessageStream = (
           const raw = trimmed.slice(5).trim();
 
           if (raw === '[DONE]') {
+            clearStreamTimeout();
             onDone(fullText);
             return;
           }
@@ -162,24 +209,40 @@ export const sendMessageStream = (
       // 콘텐츠가 있든 없든 반드시 무언가는 호출되게 해서 호출부가 항상 락을
       // 해제할 수 있게 한다 — 내용이 있으면 onDone, 완전히 비어있으면(=서버가
       // 사실상 실패한 것) onError로 처리한다.
+      clearStreamTimeout();
       if (fullText) {
         onDone(fullText);
       } else {
         onError(new Error('스트림이 콘텐츠 없이 종료되었습니다.'));
       }
     } catch (err) {
-      // AbortError는 사용자가 직접 중지(handleStop)했거나 컴포넌트 언마운트로
-      // 의도적으로 취소한 경우라 handleStop 쪽에서 이미 상태를 정리하므로 제외.
+      clearStreamTimeout();
+      // AbortError는 두 가지 경우에서 발생한다:
+      //   (1) 사용자가 직접 "정지"를 눌렀거나(handleStop) — 그쪽에서 이미 상태 정리를
+      //       하므로 여기서는 무시한다.
+      //   (2) 위 STREAM_TIMEOUT_MS 타이머가 발동해 스스로 abort한 경우(timedOut) —
+      //       이건 사용자가 취소한 게 아니라 "서버가 응답 없이 매달린 채 시간 초과된"
+      //       실질적인 실패이므로, 반드시 onError를 호출해 로딩 락을 풀고 재시도
+      //       안내를 해야 한다. signal 자체는 두 경우 모두 동일하게 AbortError로
+      //       뜨기 때문에, 원인 구분은 timedOut 플래그로 한다.
+      if ((err as Error).name === 'AbortError') {
+        if (timedOut) {
+          onError(new Error('응답 시간이 너무 오래 걸려 요청을 중단했습니다.'));
+        }
+        return;
+      }
+
       // 그 외(네트워크 끊김, 콜드스타트 중 타임아웃 등)는 반드시 onError를 호출해
       // 호출부가 로딩 상태를 해제할 기회를 준다.
-      if ((err as Error).name !== 'AbortError') {
-        console.error('[SSE Error]:', err);
-        onError(err as Error);
-      }
+      console.error('[SSE Error]:', err);
+      onError(err as Error);
     }
   })();
 
-  return () => controller.abort();
+  return () => {
+    clearStreamTimeout();
+    controller.abort();
+  };
 };
 
 export const getChatSummary = async (prompt: string): Promise<string> => {
