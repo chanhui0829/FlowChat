@@ -104,14 +104,23 @@ export const useChat = () => {
           setTyping(full);
         },
         async (finalContent) => {
-          const isViewingThisChat = getState().currentChatId === targetChatId;
-
-          if (isViewingThisChat) {
-            setIsStreaming(false);
-            setIsAwaitingResponse(false);
-            setHasReceivedFirstChunk(false);
-            setTyping('');
-          }
+          // [Fix] "채팅이 아예 안 먹는다" 버그의 핵심 원인.
+          // isStreaming/isAwaitingResponse/hasReceivedFirstChunk는 "지금 보고 있는
+          // 채팅방"과 무관하게 전역적으로 전송 가능 여부·사이드바 채팅 전환 가능
+          // 여부를 잠그는 락(lock)이다 (handleSend 상단의 `isSending || isStreaming`
+          // 가드, useChatListLogic의 `isAwaitingResponse` 가드, ChatWindow의
+          // `shouldShowStreamingBubble = isAwaitingResponse` 모두 이 값을 그대로 씀).
+          // 이걸 onChunk와 동일하게 isViewingThisChat으로 가드해버리면, 스트림이
+          // 실제로 끝난 시점에 사용자가 마침 다른 채팅방을 보고 있었다는 이유만으로
+          // 이 락이 영원히 풀리지 않는다 — "..." 로딩 표시가 사라지지 않고, "새
+          // 채팅"과 채팅방 전환이 전부 막힌 채로 고정되는 버그가 됨(리로드 전까지
+          // 복구 불가). 화면에 무얼 "보여줄지"는 onChunk에서 이미 isViewingThisChat
+          // 으로 안전하게 가드하고 있으므로, 여기서는 락 해제를 절대 조건부로 하지
+          // 않고 스트림이 끝나는 즉시 무조건 해제한다.
+          setIsStreaming(false);
+          setIsAwaitingResponse(false);
+          setHasReceivedFirstChunk(false);
+          setTyping('');
 
           stopStreamRef.current = null;
           typingRef.current = '';
@@ -137,6 +146,31 @@ export const useChat = () => {
               console.error('제목 생성 실패', e);
             }
           }
+        },
+        async (error) => {
+          // [Fix] 이전에는 fetch 실패(네트워크 오류, Render 콜드스타트 중 프록시
+          // 타임아웃으로 인한 502/504 등)가 나면 아무 콜백도 호출되지 않아 위와
+          // 완전히 같은 방식으로 로딩 락이 영원히 풀리지 않았다 — 사용자 입장에서는
+          // "..."만 뜬 채 응답도, 에러 메시지도, 재시도 방법도 없이 채팅 자체가
+          // 먹통이 된 것처럼 보였음(리로드 전까지). 에러 시에도 반드시 락을 풀고,
+          // 사용자가 실패를 인지하고 재시도할 수 있도록 메시지를 남긴다.
+          console.error('[useChat] 스트리밍 실패:', error);
+
+          setIsStreaming(false);
+          setIsAwaitingResponse(false);
+          setHasReceivedFirstChunk(false);
+          setTyping('');
+
+          stopStreamRef.current = null;
+          typingRef.current = '';
+
+          await addMessage(targetChatId!, {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content:
+              '> ⚠️ 응답을 가져오지 못했습니다. 서버가 깨어나는 중일 수 있어요 — 잠시 후 다시 시도해주세요.',
+            time: new Date().toISOString(),
+          });
         },
         history
       );

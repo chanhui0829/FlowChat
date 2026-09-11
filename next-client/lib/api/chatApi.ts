@@ -56,6 +56,13 @@ export const sendMessageStream = (
   prompt: string,
   onChunk: (data: { chunk: string; full: string }) => void,
   onDone: (full: string) => void,
+  // [Fix] 기존엔 응답이 !res.ok거나 fetch 자체가 throw하면(네트워크 오류, Render
+  // 콜드스타트 중 프록시 타임아웃으로 인한 502/504 등) 그냥 console.error만 찍고
+  // 아무 콜백도 호출하지 않았음. 호출부(useChat.ts)는 onDone이 호출될 때만 전역
+  // 로딩 상태(isAwaitingResponse 등)를 해제하므로, 이 경로를 타면 그 상태가 영원히
+  // true로 남아 "..." 로딩 표시가 안 사라지고 새 채팅 생성/전환도 계속 막히는
+  // 문제가 있었음. onError를 추가해 실패 경로에서도 반드시 콜백이 호출되게 한다.
+  onError: (error: Error) => void,
   history: Message[] = []
 ): (() => void) => {
   const controller = new AbortController();
@@ -75,6 +82,7 @@ export const sendMessageStream = (
 
       if (!res.ok || !res.body) {
         console.error('[SSE] 응답 오류:', res.status);
+        onError(new Error(`SSE response error: ${res.status}`));
         return;
       }
 
@@ -143,8 +151,13 @@ export const sendMessageStream = (
 
       if (fullText) onDone(fullText);
     } catch (err) {
+      // AbortError는 사용자가 직접 중지(handleStop)했거나 컴포넌트 언마운트로
+      // 의도적으로 취소한 경우라 handleStop 쪽에서 이미 상태를 정리하므로 제외.
+      // 그 외(네트워크 끊김, 콜드스타트 중 타임아웃 등)는 반드시 onError를 호출해
+      // 호출부가 로딩 상태를 해제할 기회를 준다.
       if ((err as Error).name !== 'AbortError') {
         console.error('[SSE Error]:', err);
+        onError(err as Error);
       }
     }
   })();
