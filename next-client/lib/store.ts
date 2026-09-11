@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { chatService } from './services/chatService';
+import { useAuthStore } from './authStore';
 import type { Chat, Message, DBChatMessage } from './types/chat';
 
 /**
@@ -29,6 +30,7 @@ interface ChatActions {
   setIsStreaming: (status: boolean) => void;
   setIsAwaitingResponse: (status: boolean) => void;
   setHasReceivedFirstChunk: (status: boolean) => void;
+  resetChats: () => void;
 }
 
 interface ChatSessionResponse {
@@ -103,7 +105,22 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
   createChat: async () => {
     set({ isCreatingChat: true });
     try {
-      const data = await chatService.createSession('새로운 채팅');
+      // 비로그인 상태에서도 대화는 가능하되(ChatGPT 방식), 서버 저장은 로그인한 사용자만 가능
+      // → user_id가 없으면 DB에 남기지 않는 로컬 전용 채팅으로 생성
+      const userId = useAuthStore.getState().user?.id;
+      if (!userId) {
+        const localId = crypto.randomUUID();
+        const newChat: Chat = { id: localId, title: '새로운 채팅', messages: [] };
+
+        set((state) => ({
+          chats: [newChat, ...state.chats],
+          currentChatId: localId,
+        }));
+
+        return localId;
+      }
+
+      const data = await chatService.createSession('새로운 채팅', userId);
       const newChat: Chat = { id: data.id, title: data.title, messages: [] };
 
       set((state) => ({
@@ -154,6 +171,12 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
       ),
     }));
 
+    // 비로그인 상태의 로컬 전용 채팅은 서버에 저장하지 않고 로컬 상태만 유지
+    if (!useAuthStore.getState().user) {
+      set({ isSavingMessage: false });
+      return;
+    }
+
     try {
       // 3. 서버 영구 저장
       await chatService.saveMessage(sessionId, msg);
@@ -170,6 +193,13 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
    * 채팅 세션 삭제
    */
   deleteChat: async (id) => {
+    // 로컬 전용(비로그인) 채팅은 서버 삭제 없이 로컬 상태에서만 제거
+    if (!useAuthStore.getState().user) {
+      const filtered = get().chats.filter((c) => c.id !== id);
+      set({ chats: filtered, currentChatId: filtered[0]?.id || null });
+      return;
+    }
+
     try {
       await chatService.deleteSession(id);
 
@@ -189,6 +219,14 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
    * 채팅 제목 수동/자동 업데이트
    */
   updateChatTitle: async (id, newTitle) => {
+    // 로컬 전용(비로그인) 채팅은 서버 업데이트 없이 로컬 상태만 갱신
+    if (!useAuthStore.getState().user) {
+      set((state) => ({
+        chats: state.chats.map((c) => (c.id === id ? { ...c, title: newTitle } : c)),
+      }));
+      return;
+    }
+
     try {
       await chatService.updateSessionTitle(id, newTitle);
 
@@ -201,4 +239,9 @@ export const useChatStore = create<ChatState & ChatActions>((set, get) => ({
       console.error('[Store: updateChatTitle Error]', error);
     }
   },
+
+  /**
+   * 로그아웃 시 이전 사용자의 채팅 데이터를 정리
+   */
+  resetChats: () => set({ chats: [], currentChatId: null }),
 }));

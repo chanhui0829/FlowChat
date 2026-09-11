@@ -43,7 +43,7 @@ const MessageItem = memo(
             </div>
           )}
           <div
-            className={`flex flex-col min-w-0 max-w-[calc(100%-5.5rem)] md:max-w-[calc(100%-7rem)] ${
+            className={`flex flex-col min-w-0 max-w-[calc(100%-6rem)] md:max-w-[calc(100%-7.5rem)] ${
               isUser ? 'items-end' : 'items-start'
             }`}
           >
@@ -55,9 +55,14 @@ const MessageItem = memo(
               }`}
             >
               {!isUser && (
+                // [Fix] 예전엔 버블 바깥 40px(-right-10)에 아이콘만 떠 있었는데, 모바일
+                // 좁은 화면에서는 그 값이 뷰포트 밖으로 튀어나가 opacity-0이어도 레이아웃
+                // 폭에 영향을 줘서 항상 가로 스크롤이 생기는 원인이었음. 아예 안쪽으로
+                // 넣기보다, 말풍선 모서리 위에 살짝 걸쳐진 동그란 배지 형태로 바꿔서
+                // 버블 폭 안에 머물면서도 내용 텍스트와 겹치지 않게 함
                 <button
                   onClick={() => onCopy(msg.content, index)}
-                  className="absolute -top-1 -right-10 p-2 text-zinc-400 hover:text-zinc-900 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -top-3 right-2 p-1.5 rounded-full bg-white border border-zinc-100 shadow-sm text-zinc-400 hover:text-zinc-900 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   {copiedIndex === index ? (
                     <FiCheck size={16} className="text-emerald-500" />
@@ -77,7 +82,7 @@ const MessageItem = memo(
             </span>
           </div>
           {isUser && (
-            <div className="shrink-0 w-10 h-10 flex items-center justify-center rounded-2xl bg-zinc-900 shadow-lg text-white">
+            <div className="shrink-0 w-10 h-10 flex mr-2 items-center justify-center rounded-2xl bg-zinc-900 shadow-lg text-white">
               <FiUser size={20} />
             </div>
           )}

@@ -63,14 +63,15 @@ export default function ChatInput({ input, setInput, onSend, onStop, typing }: C
   }, [input, onSend]);
 
   return (
-    <div className="p-6 bg-transparent">
-      <div className="w-full mx-auto flex items-end gap-3.5">
+    <div className="px-6 pb-5 pt-2 bg-transparent">
+      {/* 최근 트렌드 반영: 화면 폭을 꽉 채우지 않는 좁은 max-width + 낮아진 높이로 더 가벼운 인상 */}
+      <div className="w-full max-w-3xl mx-auto flex items-end gap-2.5">
         {/* Input Container */}
         <div
           className="
-            flex-1 flex items-center bg-white border border-zinc-200/60 rounded-3xl px-5 py-2.5
-            min-h-[56px] shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all duration-300
-            focus-within:border-zinc-300 focus-within:shadow-[0_8px_40px_rgba(0,0,0,0.08)]
+            flex-1 flex items-center bg-white border border-zinc-200/60 rounded-2xl px-4
+            min-h-[46px] shadow-[0_6px_20px_rgba(0,0,0,0.04)] transition-all duration-300
+            focus-within:border-zinc-300 focus-within:shadow-[0_8px_32px_rgba(0,0,0,0.07)]
             focus-within:ring-4 focus-within:ring-zinc-100
           "
         >
@@ -81,8 +82,8 @@ export default function ChatInput({ input, setInput, onSend, onStop, typing }: C
             onChange={(e) => setInput(e.target.value)}
             placeholder="AI에게 무엇이든 물어보세요..."
             className="
-              w-full resize-none bg-transparent outline-none text-[14.5px] leading-relaxed
-              max-h-[120px] overflow-y-auto py-2.5 text-zinc-800 placeholder:text-zinc-400
+              w-full resize-none bg-transparent outline-none text-[14px] leading-relaxed
+              max-h-[120px] overflow-y-auto py-[11px] text-zinc-800 placeholder:text-zinc-400
               scrollbar-hide
             "
             onKeyDown={(e) => {
@@ -106,19 +107,19 @@ export default function ChatInput({ input, setInput, onSend, onStop, typing }: C
           onClick={showStopButton ? onStop : handleSend}
           disabled={!showStopButton && !input.trim()}
           className={`
-            flex items-center justify-center w-14 h-14 rounded-2xl transition-all duration-300 shrink-0 mb-1
+            flex items-center justify-center w-[46px] h-[46px] rounded-xl transition-all duration-300 shrink-0
             ${
               showStopButton
                 ? 'bg-zinc-100 hover:bg-zinc-200 text-zinc-900 active:scale-90 shadow-sm'
-                : 'bg-zinc-900 hover:bg-black text-white active:scale-95 shadow-xl shadow-zinc-200 disabled:bg-zinc-200 disabled:shadow-none disabled:text-zinc-400'
+                : 'bg-zinc-900 hover:bg-black text-white active:scale-95 shadow-lg shadow-zinc-200 disabled:bg-zinc-200 disabled:shadow-none disabled:text-zinc-400'
             }
           `}
           aria-label={showStopButton ? '응답 중지' : '메시지 전송'}
         >
           {showStopButton ? (
-            <FiSquare size={18} className="fill-current text-zinc-900" />
+            <FiSquare size={16} className="fill-current text-zinc-900" />
           ) : (
-            <FiSend size={19} className="relative left-[-1px] top-[1px]" />
+            <FiSend size={17} className="relative left-[-1px] top-[1px]" />
           )}
         </button>
       </div>

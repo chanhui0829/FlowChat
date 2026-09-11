@@ -7,18 +7,23 @@ import {
   FiTrash2,
   FiEdit2,
   FiSearch,
-  FiMessageSquare,
+  FiMessageCircle,
   FiAlertCircle,
+  FiLogIn,
+  FiLogOut,
 } from 'react-icons/fi';
 
 import { useChatListLogic } from '@/hooks/useChatListLogic';
 import { useChatStore } from '@/lib/store';
+import { useAuthStore } from '@/lib/authStore';
+import Logo from '@/assets/Logo';
 import type { Chat } from '@/lib/types/chat';
 
 interface ChatListProps {
   setDeleteTargetId: (id: string) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (v: boolean) => void;
+  onRequireAuth: () => void;
 }
 /**
  * @description 채팅 히스토리 및 내비게이션을 담당하는 사이드바 컴포넌트
@@ -27,6 +32,7 @@ export default function ChatList({
   setDeleteTargetId,
   sidebarOpen,
   setSidebarOpen,
+  onRequireAuth,
 }: ChatListProps) {
   const { state, actions, refs } = useChatListLogic(setSidebarOpen);
   const { isLoadingChats, error } = useChatStore();
@@ -34,97 +40,177 @@ export default function ChatList({
   const isSavingMessage = useChatStore((state) => state.isSavingMessage);
   const isAwaitingResponse = useChatStore((state) => state.isAwaitingResponse);
 
+  // 하단 계정 영역: 로그인 상태에 따라 프로필/로그인 버튼 분기
+  const user = useAuthStore((state) => state.user);
+  const signOut = useAuthStore((state) => state.signOut);
+  const chatCount = useChatStore((state) => state.chats.length);
+
   // 채팅 전환 비활성화 조건
   const isDisabled = isAwaitingResponse || isCreatingChat || isSavingMessage;
+
+  /**
+   * 채팅 목록을 그룹 라벨("오늘" / "이전 기록")과 함께 렌더링
+   * 그룹이 비어있으면 라벨 자체를 숨겨 불필요한 여백이 남지 않도록 함
+   */
+  const renderGroup = (label: string, groupChats: Chat[]) => {
+    if (groupChats.length === 0) return null;
+    return (
+      <div key={label}>
+        <div className="px-2.5 pt-3 pb-1.5 text-[10px] font-bold tracking-wider uppercase text-zinc-400">
+          {label}
+        </div>
+        {groupChats.map((chat) => (
+          <ChatItem
+            key={chat.id}
+            chat={chat}
+            isSelected={chat.id === state.currentChatId}
+            isEditing={state.editingId === chat.id}
+            menuOpenId={state.menuOpenId}
+            setMenuOpenId={actions.setMenuOpenId}
+            setEditingId={actions.setEditingId}
+            setEditValue={actions.setEditValue}
+            editValue={state.editValue}
+            handleSaveEdit={actions.handleSaveEdit}
+            setDeleteTargetId={setDeleteTargetId}
+            onSelect={() => actions.handleChatSelect(chat.id)}
+            isSelectDisabled={isDisabled}
+            menuRef={refs.menuRef}
+            editRef={refs.editRef}
+          />
+        ))}
+      </div>
+    );
+  };
 
   return (
     <aside
       className={`
-      fixed inset-y-0 left-0 z-40 w-80 bg-zinc-50/80 backdrop-blur-2xl border-r border-zinc-200/50 
+      fixed inset-y-0 left-0 z-40 w-80 bg-zinc-50/80 backdrop-blur-2xl border-r border-zinc-200/50
       transform transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] md:relative md:translate-x-0
       ${sidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}
     `}
     >
-      <div className="flex flex-col h-full px-5 py-6">
-        {/* New Conversation 버튼: 스트리밍 중 비활성화 */}
-        <div className="mb-8">
+      <div className="flex flex-col h-full">
+        {/* 헤더: 로고 + 컴팩트 새 채팅 버튼 (기존의 전체 폭 버튼을 대체) */}
+        <div className="flex items-center justify-between gap-2 pl-5 pr-2.5 pt-6 pb-4 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-[9px] bg-gradient-to-br from-zinc-600 to-zinc-950 flex items-center justify-center shrink-0 shadow-sm shadow-zinc-900/30">
+              <Logo className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-[15px] font-extrabold tracking-tight text-zinc-900 truncate">
+              FlowChat
+            </span>
+          </div>
+
           <button
             onClick={actions.handleCreateChat}
             disabled={isDisabled}
             className={`
-              group w-full py-3.5 flex items-center justify-center gap-2.5 rounded-2xl font-semibold shadow-lg transition-all active:scale-[0.96]
+              group shrink-0 h-7 px-3 flex items-center justify-center gap-1 rounded-[10px] border text-[12px] font-semibold transition-colors duration-300 active:scale-95
               ${
                 isDisabled
-                  ? 'bg-zinc-300 text-zinc-500 cursor-not-allowed shadow-none'
-                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-50'
+                  ? 'bg-transparent border-zinc-200 text-zinc-300 cursor-not-allowed'
+                  : 'bg-transparent border-zinc-200 text-zinc-700 hover:bg-zinc-900 hover:border-zinc-900 hover:text-white'
               }
             `}
           >
-            <FiPlus size={16} />
-            <span>New Conversation</span>
+            <FiPlus
+              size={13}
+              strokeWidth={2.75}
+              className="shrink-0 transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:rotate-90"
+            />
+            새 채팅
           </button>
         </div>
 
-        {/* 검색 */}
-        <div className="relative mb-6">
-          <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={16} />
-          <input
-            type="text"
-            placeholder="기록 검색..."
-            value={state.search}
-            onChange={(e) => actions.setSearch(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 bg-white border border-zinc-200/50 rounded-2xl text-sm outline-none focus:ring-4 focus:ring-zinc-900/5 transition-all"
-          />
+        <div className="flex flex-col flex-1 min-h-0 px-5 pt-1 pb-6">
+          {/* 검색: 흰 박스 대신 사이드바 배경에 스며드는 블렌디드 스타일 */}
+          <div className="relative mb-5 shrink-0">
+            <FiSearch
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400"
+              size={14}
+            />
+            <input
+              type="text"
+              placeholder="기록 검색..."
+              value={state.search}
+              onChange={(e) => actions.setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-zinc-200/70 rounded-xl text-[13px] outline-none focus:bg-white focus:ring-2 focus:ring-zinc-900/10 transition-all"
+            />
+          </div>
+
+          {/* 에러 배너 */}
+          {error && (
+            <div className="mb-4 flex items-start gap-2.5 px-4 py-3 bg-red-50 border border-red-100 rounded-2xl text-red-500 text-xs font-medium shrink-0">
+              <FiAlertCircle size={14} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* 스트리밍 중 안내 배너 */}
+          {isDisabled && (
+            <div className="mb-4 flex items-center gap-2.5 px-4 py-3 bg-zinc-100 border border-zinc-200 rounded-2xl text-zinc-500 text-xs font-medium shrink-0">
+              <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-pulse shrink-0" />
+              AI 응답 중에는 채팅을 전환할 수 없어요
+            </div>
+          )}
+
+          {/* 채팅 목록: "오늘 / 이전 기록"으로 그룹핑 (기준: 마지막 메시지 시각) */}
+          <div className="flex-1 overflow-y-auto space-y-1 pr-1 sidebar-scroll">
+            {isLoadingChats ? (
+              <div className="space-y-2 pt-1">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="h-12 rounded-2xl bg-zinc-100 animate-pulse"
+                    style={{ opacity: 1 - i * 0.15 }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <>
+                {renderGroup('오늘', state.groupedChats.today)}
+                {renderGroup('이전 기록', state.groupedChats.previous)}
+              </>
+            )}
+          </div>
         </div>
 
-        {/* 에러 배너 */}
-        {error && (
-          <div className="mb-4 flex items-start gap-2.5 px-4 py-3 bg-red-50 border border-red-100 rounded-2xl text-red-500 text-xs font-medium">
-            <FiAlertCircle size={14} className="shrink-0 mt-0.5" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* 스트리밍 중 안내 배너 */}
-        {isDisabled && (
-          <div className="mb-4 flex items-center gap-2.5 px-4 py-3 bg-zinc-100 border border-zinc-200 rounded-2xl text-zinc-500 text-xs font-medium">
-            <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-pulse shrink-0" />
-            AI 응답 중에는 채팅을 전환할 수 없어요
-          </div>
-        )}
-
-        {/* 채팅 목록 */}
-        <div className="flex-1 overflow-y-auto space-y-1 pr-1 sidebar-scroll">
-          {isLoadingChats ? (
-            <div className="space-y-2 pt-1">
-              {[1, 2, 3, 4].map((i) => (
-                <div
-                  key={i}
-                  className="h-12 rounded-2xl bg-zinc-100 animate-pulse"
-                  style={{ opacity: 1 - i * 0.15 }}
-                />
-              ))}
+        {/* 하단 계정 영역 */}
+        <div className="px-5 pb-6 pt-4 border-t border-zinc-200/50 shrink-0">
+          {user ? (
+            <div className="flex items-center gap-3 px-1">
+              <div className="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                {user.email?.[0]?.toUpperCase() || 'U'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-bold text-zinc-900 truncate">
+                  {user.email?.split('@')[0]}
+                </div>
+                {/* Free Plan 대신 실제 사용 정보(대화 개수)를 노출 */}
+                <div className="text-[11px] text-zinc-400 truncate">대화 {chatCount}개</div>
+              </div>
+              <button
+                onClick={() => signOut()}
+                aria-label="로그아웃"
+                className="p-2 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-xl transition-all shrink-0"
+              >
+                <FiLogOut size={16} />
+              </button>
             </div>
           ) : (
-            state.filteredChats.map((chat) => (
-              <ChatItem
-                key={chat.id}
-                chat={chat}
-                isSelected={chat.id === state.currentChatId}
-                isEditing={state.editingId === chat.id}
-                menuOpenId={state.menuOpenId}
-                setMenuOpenId={actions.setMenuOpenId}
-                setEditingId={actions.setEditingId}
-                setEditValue={actions.setEditValue}
-                editValue={state.editValue}
-                handleSaveEdit={actions.handleSaveEdit}
-                setDeleteTargetId={setDeleteTargetId}
-                onSelect={() => actions.handleChatSelect(chat.id)}
-                isSelectDisabled={isDisabled}
-                menuRef={refs.menuRef}
-                editRef={refs.editRef}
-              />
-            ))
+            <div>
+              <p className="text-[10.5px] text-zinc-400 mb-2 pl-0.5">
+                게스트로 이용 중 · 대화가 저장되지 않아요
+              </p>
+              <button
+                onClick={onRequireAuth}
+                className="w-full py-2.5 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-zinc-700 to-zinc-950 hover:shadow-lg hover:shadow-zinc-900/30 text-zinc-50 font-semibold text-sm transition-all active:scale-[0.98]"
+              >
+                <FiLogIn size={14} />
+                로그인
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -170,11 +256,11 @@ const ChatItem = memo(function ChatItem({
   return (
     <div
       className={`
-        group relative flex items-center gap-3.5 px-4 py-3.5 rounded-2xl transition-all
+        group relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all
         ${isSelectDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
         ${
           isSelected
-            ? 'bg-white shadow-sm ring-1 ring-zinc-200/50'
+            ? 'bg-zinc-100'
             : !isSelectDisabled
             ? 'hover:bg-zinc-200/40'
             : ''
@@ -182,7 +268,7 @@ const ChatItem = memo(function ChatItem({
       `}
       onClick={() => !isSelectDisabled && onSelect()}
     >
-      <FiMessageSquare className={isSelected ? 'text-zinc-900' : 'text-zinc-400'} size={18} />
+      <FiMessageCircle className={isSelected ? 'text-zinc-900' : 'text-zinc-400'} size={17} />
 
       <div className="flex-1 min-w-0">
         {isEditing ? (

@@ -40,9 +40,17 @@ body {
 }
 
 .sidebar-scroll:hover::-webkit-scrollbar-thumb {
-  background: #d4d4d8; 
+  background: #d4d4d8;
 }
 
 .sidebar-scroll:hover::-webkit-scrollbar-thumb:hover {
-  background: #a1a1aa; 
+  background: #a1a1aa;
+}
+
+/* [모바일 스크롤바 자동 숨김] 모바일은 :hover가 없어서 위 규칙이 사실상 동작하지 않음.
+   스크롤 중일 때만 JS로 .scroll-active 클래스를 붙였다가, 정지 후 일정 시간(1.5s) 뒤
+   클래스를 떼는 방식으로 데스크탑 :hover와 별개로 모바일에서도 "스크롤할 때만 살짝
+   보였다가 사라지는" 얇은 스크롤바를 구현함 */
+.sidebar-scroll.scroll-active::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
 }

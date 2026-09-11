@@ -7,11 +7,6 @@ import mcpRouter from './routes/mcp';
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// [Fix] Render 등 프록시 뒤에서 실행될 때 X-Forwarded-For 헤더를 신뢰하도록 설정.
-// 이게 없으면 express-rate-limit이 "trust proxy가 false인데 X-Forwarded-For가 온다"며
-// ValidationError를 던지고, IP 기준 요청 제한이 정확하게 동작하지 않음.
-app.set('trust proxy', 1);
-
 // [Fix 4] CORS origin 환경변수화
 // 기존 wildcard('*')는 모든 도메인의 요청을 허용하므로 보안 취약
 // 환경변수로 허용할 도메인을 명시하고, 콤마로 다중 도메인 지원

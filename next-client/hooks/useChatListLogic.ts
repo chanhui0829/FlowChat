@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useChatStore } from '@/lib/store';
+import { isToday } from '@/lib/utils/dateHelpers';
 
 export const useChatListLogic = (setSidebarOpen: (v: boolean) => void) => {
   const router = useRouter();
@@ -24,6 +25,23 @@ export const useChatListLogic = (setSidebarOpen: (v: boolean) => void) => {
     const keyword = search.toLowerCase();
     return chats.filter((chat) => chat.title.toLowerCase().includes(keyword));
   }, [chats, search]);
+
+  /**
+   * 사이드바 목록을 "오늘 / 이전 기록"으로 그룹핑
+   * 기준: 채팅의 마지막 메시지 시각. 메시지가 아직 없는 새 채팅은 방금 생성된 것이므로 오늘로 분류
+   */
+  const groupedChats = useMemo(() => {
+    const today: typeof filteredChats = [];
+    const previous: typeof filteredChats = [];
+
+    filteredChats.forEach((chat) => {
+      const lastMessage = chat.messages[chat.messages.length - 1];
+      const refTime = lastMessage?.time ?? new Date().toISOString();
+      (isToday(refTime) ? today : previous).push(chat);
+    });
+
+    return { today, previous };
+  }, [filteredChats]);
 
   const handleChatSelect = useCallback(
     (id: string) => {
@@ -82,6 +100,7 @@ export const useChatListLogic = (setSidebarOpen: (v: boolean) => void) => {
       editingId,
       editValue,
       filteredChats,
+      groupedChats,
       currentChatId,
       isAwaitingResponse,
     },

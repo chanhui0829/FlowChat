@@ -17,11 +17,13 @@ export const chatService = {
 
   /**
    * 새로운 채팅 세션 DB 생성
+   * [Technical Point] chat_sessions.user_id는 NOT NULL + RLS insert 정책(auth.uid() = user_id) 대상이므로
+   * 반드시 로그인한 사용자의 id를 함께 전달해야 합니다.
    */
-  async createSession(title: string) {
+  async createSession(title: string, userId: string) {
     const { data, error } = await supabase
       .from('chat_sessions')
-      .insert([{ title }])
+      .insert([{ title, user_id: userId }])
       .select()
       .single();
 

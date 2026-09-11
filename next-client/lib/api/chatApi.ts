@@ -123,11 +123,24 @@ export const sendMessageStream = (
 };
 
 export const getChatSummary = async (prompt: string): Promise<string> => {
+  // [Fix] 서버 요약 API가 실패/빈 응답을 줄 경우 항상 고정 문구('새로운 대화')로 폴백하면
+  // 실제로 무슨 대화였는지 전혀 알아볼 수 없음 — 원문을 짧게 잘라 대신 사용
+  const fallbackFromPrompt = () => {
+    const trimmed = prompt.trim();
+    return trimmed.length > 20 ? `${trimmed.slice(0, 20)}…` : trimmed || '새로운 대화';
+  };
+
   try {
     const { data } = await axios.post<SummaryResponse>(`${MCP_URL}/Tsummarize`, { prompt });
-    return data.title;
+    const title = (data.title || '').trim();
+
+    // [Fix] 요약 모델이 지시를 무시하고 답변 전체를 제목으로 반환하는 경우가 있어
+    // (예: "동기부여 명언 알려줘" → 명언 목록 전체가 제목이 되어버림), 서버 수정과는
+    // 별개로 클라이언트에서도 방어적으로 길이를 제한함
+    if (!title) return fallbackFromPrompt();
+    return title.length > 20 ? `${title.slice(0, 20)}…` : title;
   } catch (error) {
     console.error('[Summary API Error]:', error);
-    return '새로운 대화';
+    return fallbackFromPrompt();
   }
 };

@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useRef, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useChatStore } from '../lib/store';
 import { sendMessageStream, getChatSummary } from '../lib/api/chatApi';
 
 export const useChat = () => {
+  const router = useRouter();
   const {
     addMessage,
     createChat,
@@ -42,12 +44,25 @@ export const useChat = () => {
 
       let targetChatId = getState().currentChatId;
 
-      if (!targetChatId) {
+      // [Fix] currentChatId가 있어도 실제 chats 배열에 존재하는지 함께 확인
+      // 이유: 게스트 채팅은 서버/로컬스토리지에 영속화되지 않으므로, 새로고침이나
+      //       예기치 못한 재마운트 이후엔 currentChatId(URL 기반)만 남고 실제 chats
+      //       엔트리는 사라진 "유령 ID" 상태가 될 수 있음. 이 경우 addMessage가
+      //       매칭되는 채팅을 못 찾아 조용히 무시되어 채팅 자체가 먹통이 되는
+      //       문제가 있었음 → 존재하지 않으면 새 채팅을 만들어 자연 복구시킴
+      const chatExists =
+        !!targetChatId && getState().chats.some((c) => c.id === targetChatId);
+
+      if (!chatExists) {
         targetChatId = await createChat();
-        if (!targetChatId) {
-          setIsAwaitingResponse(false);
-          return;
+        if (targetChatId) {
+          router.replace(`/chat/${targetChatId}`);
         }
+      }
+
+      if (!targetChatId) {
+        setIsAwaitingResponse(false);
+        return;
       }
 
       inputRef.current = '';

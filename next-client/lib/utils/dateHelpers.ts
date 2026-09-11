@@ -14,6 +14,21 @@ export const isSameDay = (a: string, b: string) => {
   );
 };
 
+/**
+ * @description 주어진 시각이 오늘인지 여부를 반환
+ * 사이드바 채팅 목록을 "오늘 / 이전 기록"으로 그룹핑할 때 사용
+ */
+export const isToday = (dateStr: string) => {
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return false;
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+};
+
 export const formatDate = (dateStr: string) => {
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return '';
