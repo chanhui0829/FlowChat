@@ -29,11 +29,23 @@ export default function ChatInput({ input, setInput, onSend, onStop, typing }: C
 
   // prop 대신 store에서 직접 구독 — isCreatingChat/isSavingMessage와 분리된 정확한 스트리밍 상태
   const isStreaming = useChatStore((state) => state.isStreaming);
+  // [Fix] "전송 버튼을 누르면 중지 버튼으로 안 바뀌고 비활성화 버튼이 된다"는 버그.
+  // isStreaming은 SSE 첫 청크를 실제로 받아야만 true가 되는데, 전송 직후부터 첫
+  // 청크가 오기까지("..." 로딩 점만 보이는 구간)는 isStreaming이 계속 false이고
+  // typing도 아직 빈 문자열이라 showStopButton이 false로 계산됐음 — 이때 input은
+  // 이미 전송되며 비워진 상태라 "전송" 버튼 쪽 disabled 조건(!input.trim())까지
+  // 겹쳐서 그냥 비활성화된 버튼만 보였음. 그 결과 요청이 응답을 기다리는 동안에는
+  // 사용자가 취소할 방법이 전혀 없었다(스트리밍이 실제로 시작된 뒤에만 중지 가능).
+  // isAwaitingResponse(전송 시점부터 응답 종료까지 true로 유지되는 상태)를 함께
+  // 봐서, 첫 청크를 기다리는 동안에도 중지 버튼을 보여주고 handleStop으로 취소할
+  // 수 있게 한다.
+  const isAwaitingResponse = useChatStore((state) => state.isAwaitingResponse);
 
   // 중지 버튼 표시 조건:
+  //   - isAwaitingResponse: 전송~응답 완료 전 구간 전체(첫 청크 대기 포함)
   //   - isStreaming: AI가 실제 SSE 응답 중
   //   - typing: 청크가 이미 화면에 렌더링 중 (isStreaming이 false로 바뀌는 찰나의 타이밍 보정)
-  const showStopButton = isStreaming || !!(typing && typing.length > 0);
+  const showStopButton = isAwaitingResponse || isStreaming || !!(typing && typing.length > 0);
 
   /**
    * Auto-growing Textarea Logic
