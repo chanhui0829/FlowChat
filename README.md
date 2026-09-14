@@ -33,15 +33,6 @@
 
 ---
 
-## 🛠 Case-Study (핵심 트러블슈팅)
-> 프로젝트 내 **Case-Study** 메뉴에서 상세한 기술적 해결 과정을 확인하실 수 있습니다.
-
-1. **실시간 스트리밍 한글 깨짐 및 파싱 에러 방지** (TextDecoder 도입)
-2. **AbortController를 통한 경쟁 상태(Race Condition) 방어**
-3. **CSR에서 Next.js SSR로의 아키텍처 마이그레이션** (초기 로딩 속도 및 SEO 최적화)
-
----
-
 ## 🧠 기술 스택
 
 ### Frontend
@@ -66,8 +57,6 @@
 ```
 next-client/
 ├── app/                          # Next.js App Router
-│   ├── casestudy/
-│   │   └── page.tsx             # 기술 케이스 스터디 페이지
 │   ├── chat/
 │   │   └── [id]/
 │   │       └── page.tsx         # 동적 라우팅 채팅 페이지
@@ -149,13 +138,6 @@ OPENROUTER_API_KEY=your_openrouter_key
 또한 실시간 스트리밍 시 발생하는 데이터 깨짐 현상과 Race Condition 문제를 해결하며 스트리밍 안정성을 확보했습니다.
 
 ---
-
-## 🧪 Testing & Quality Assurance
-프로젝트의 핵심 비즈니스 로직과 사용자 인터랙션의 안정성을 확보하기 위해 **Vitest**와 **React Testing Library**를 도입하여 단위 테스트를 구현했습니다.
-
-### 주요 테스트 전략
-* **Unit Testing (Utility Functions):** `dateHelpers.ts` 등 데이터 처리 로직의 경계값과 예외 케이스를 테스트하여 날짜 계산 및 시간 포맷팅의 정확성을 보장합니다.
-* **Component Testing (UI Logic):** `ChatInput.tsx` 등 핵심 UI 컴포넌트의 사용자 인터랙션(전송, 중지, 상태 변화)을 시뮬레이션하여 예상치 못한 렌더링 오류를 방지합니다.
 
 ## 🧑‍💻 Author
 
