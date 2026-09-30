@@ -62,6 +62,20 @@ export const streamChat = async (req: Request, res: Response) => {
 
   const safeHistory: HistoryMessage[] = sanitizeHistory(history);
 
+  // [Fix] 클라이언트가 Stop 버튼(AbortController.abort())을 누르거나 탭/연결을 끊어도
+  // 서버는 그 사실을 몰라서 OpenRouter 스트림을 끝까지 다 받아 res.write()만 실패시키고
+  // 있었음 — 클라이언트 쪽 취소가 업스트림 LLM 생성 자체는 멈추지 못해, 사용자가 이미 멈춘
+  // 응답을 서버는 계속 생성·소비(과금)하는 구조였음. req의 'close' 이벤트(클라이언트 연결
+  // 종료)를 감지해 같은 요청을 취소하는 AbortController로 전파한다.
+  const upstreamController = new AbortController();
+  let clientDisconnected = false;
+  req.on('close', () => {
+    if (!res.writableEnded) {
+      clientDisconnected = true;
+      upstreamController.abort();
+    }
+  });
+
   try {
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache');
@@ -83,25 +97,34 @@ export const streamChat = async (req: Request, res: Response) => {
       { role: 'user', content: prompt },
     ];
 
-    const stream = await openai.chat.completions.create({
-      model: CHAT_MODEL, // [Fix 5] 환경변수로 분리
-      messages,
-      stream: true,
-      temperature: 0.3,
-    });
+    const stream = await openai.chat.completions.create(
+      {
+        model: CHAT_MODEL, // [Fix 5] 환경변수로 분리
+        messages,
+        stream: true,
+        temperature: 0.3,
+      },
+      { signal: upstreamController.signal } // [Fix] 클라이언트 연결 종료를 업스트림 요청에 전파
+    );
 
     for await (const chunk of stream) {
       const content = chunk.choices[0]?.delta?.content || '';
-      if (content) res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      if (content && !res.writableEnded) res.write(`data: ${JSON.stringify({ content })}\n\n`);
     }
 
-    res.write('data: [DONE]\n\n');
-    res.end();
+    if (!res.writableEnded) {
+      res.write('data: [DONE]\n\n');
+      res.end();
+    }
   } catch (error) {
+    if (clientDisconnected) {
+      // 클라이언트가 스스로 끊은 정상적인 취소 — 에러로 취급하지 않고 조용히 종료
+      return;
+    }
     console.error('Streaming error:', error);
     if (!res.headersSent) {
       res.status(500).end();
-    } else {
+    } else if (!res.writableEnded) {
       res.end();
     }
   }
